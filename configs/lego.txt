@@ -17,7 +17,7 @@ step_ratio = 1.5
 
 
 #------ Resolution ------
-N_voxel_init            = 16777216 # 128**3 2097156
+N_voxel_init            = 2097156 # 128**3 2097156
 N_voxel_final           = 27000000 # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]
 update_AlphaMask_list   = [2000,4000]

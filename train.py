@@ -352,7 +352,7 @@ def reconstruction(args):
             PSNRs_train = []
 
 
-        """if iteration in update_AlphaMask_list:
+        if iteration in update_AlphaMask_list:
 
             if reso_cur[0] * reso_cur[1] * reso_cur[2]<256**3:# update volume resolution
                 reso_mask = reso_cur
@@ -367,9 +367,9 @@ def reconstruction(args):
             if not args.ndc_ray and iteration == update_AlphaMask_list[1]:
                 # filter rays outside the bbox
                 allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
-                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)"""
+                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)
 
-        if iteration in update_AlphaMask_list:
+        """if iteration in update_AlphaMask_list:
 
             if reso_cur[0] * reso_cur[1] * reso_cur[2]<=256**3:# update volume resolution
                 reso_mask = reso_cur
@@ -384,10 +384,10 @@ def reconstruction(args):
             if not args.ndc_ray and iteration == update_AlphaMask_list[1]:
                 # filter rays outside the bbox
                 allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
-                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)
+                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)"""
 
 
-        """if iteration in upsamp_list:
+        if iteration in upsamp_list:
             n_voxels = N_voxel_list.pop(0)
             reso_cur = N_to_reso(n_voxels, tensorf.aabb)
             nSamples = min(args.nSamples, cal_n_samples(reso_cur,args.step_ratio))
@@ -399,7 +399,7 @@ def reconstruction(args):
             else:
                 lr_scale = args.lr_decay_target_ratio ** (iteration / args.n_iters)
             grad_vars = tensorf.get_optparam_groups(args.lr_init*lr_scale, args.lr_basis*lr_scale)
-            optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))"""
+            optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
         
 
     tensorf.save(f'{logfolder}/{args.expname}.th')
