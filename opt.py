@@ -15,6 +15,12 @@ def config_parser(cmd=None):
     parser.add_argument("--progress_refresh_rate", type=int, default=10,
                         help='how many iterations to show psnrs or iters')
 
+    # Number images 
+    parser.add_argument("--N_train_imgs", type=int, default=0,
+                        help='Number of train images')
+    parser.add_argument("--N_test_imgs", type=int, default=0,
+                        help='Number of test images')                                                                                                
+
     parser.add_argument('--with_depth', action='store_true')
     parser.add_argument('--downsample_train', type=float, default=1.0)
     parser.add_argument('--downsample_test', type=float, default=1.0)
@@ -54,6 +60,24 @@ def config_parser(cmd=None):
                         help='loss weight')
     parser.add_argument("--TV_weight_app", type=float, default=0.0,
                         help='loss weight')
+    # Regularization
+    parser.add_argument("--free_reg", action='store_true',
+                        help='using entropy ray loss')
+    parser.add_argument("--freq_reg_ratio", type=float, default=1,
+                        help='encoding reg ratio')
+    parser.add_argument("--max_vis_freq_ratio", type=float, default=0.0,
+                        help='encoding reg')                        
+    # Occ
+    parser.add_argument("--occ_reg", action='store_true',
+                        help='using occlusion reg')
+    parser.add_argument("--occ_reg_loss_mult", type=float, default=0.0,
+                        help='loss occlusion')
+    parser.add_argument("--occ_reg_range", type=int, default=0,
+                        help='reg range occlusion')
+    parser.add_argument("--occ_wb_range", type=int, default=0,
+                        help='wb range occlusion')                        
+    parser.add_argument("--occ_wb_prior", type=bool, default=False,
+                        help='prior occlusion')                      
     
     # model
     # volume options
@@ -70,6 +94,16 @@ def config_parser(cmd=None):
     parser.add_argument("--density_shift", type=float, default=-10,
                         help='shift density in softplus; making density = 0  when feature == 0')
                         
+    # mip_nerf
+    parser.add_argument("--mip_nerf", action='store_true',
+                        help='using mip_nerf')
+    parser.add_argument("--randomized", action='store_true',
+                        help='using random')          
+    parser.add_argument("--ray_shape", type=str, default='cone', choices=['cone', 'cylinder'],
+                        help='choice ray shape')                                                                              
+    parser.add_argument("--num_levels", type=int, default=1,
+                        help='number of forward per iteration')    
+
     # network decoder
     parser.add_argument("--shadingMode", type=str, default="MLP_PE",
                         help='which shading mode to use')
@@ -83,14 +117,13 @@ def config_parser(cmd=None):
                         help='hidden feature channel in MLP')
     
 
-
     parser.add_argument("--ckpt", type=str, default=None,
                         help='specific weights npy file to reload for coarse network')
-    parser.add_argument("--render_only", type=int, default=0)
-    parser.add_argument("--render_test", type=int, default=0)
-    parser.add_argument("--render_train", type=int, default=0)
-    parser.add_argument("--render_path", type=int, default=0)
-    parser.add_argument("--export_mesh", type=int, default=0)
+    parser.add_argument("--render_only", default=False, action="store_true")
+    parser.add_argument("--render_test", default=False, action="store_true")
+    parser.add_argument("--render_train", default=False, action="store_true")
+    parser.add_argument("--render_path", default=False, action="store_true")
+    parser.add_argument("--export_mesh", default=False, action="store_true")
 
     # rendering options
     parser.add_argument('--lindisp', default=False, action="store_true",
@@ -126,8 +159,12 @@ def config_parser(cmd=None):
     # logging/saving options
     parser.add_argument("--N_vis", type=int, default=5,
                         help='N images to vis')
-    parser.add_argument("--vis_every", type=int, default=10000,
-                        help='frequency of visualize the image')
+    parser.add_argument("--vis_every", type=int, default=1000,
+                        help='frequency of visualize the image')  
+    parser.add_argument("--train_vis_every", type=int, default=1000,
+                        help='visualize the training image every')    
+    parser.add_argument("--overwrt", action="store_true",
+                        help='overwrite checkpoint')                                                    
     if cmd is not None:
         return parser.parse_args(cmd)
     else:
