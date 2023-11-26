@@ -1,0 +1,87 @@
+#------ Folder ------ 
+dataset_name = blender
+datadir = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
+expname =  lego
+basedir = ./log
+
+
+#------ Number images ------
+N_train_imgs  = 8
+N_test_imgs   = 25
+
+
+#------ Config parameters ------
+n_iters = 15000
+batch_size = 1024
+step_ratio = 1.5
+
+
+#------ Resolution ------
+N_voxel_init            = 2097156 # 128**3 2097156
+N_voxel_final           = 27000000 # 300**3
+upsamp_list             = [2000,3000,4000,5500,7000]
+update_AlphaMask_list   = [2000,4000]
+downsample_train        = 2
+
+
+#------ Model name ------
+model_name    = TensorVMSplit
+shadingMode   = MLP_Fea
+fea2denseAct  = softplus
+overwrt       = True 
+
+
+#------ Test ------
+N_vis             = 5
+vis_every         = 1000
+train_vis_every   = 1000
+
+
+#------ Render ------
+render_test = 1
+export_mesh   = True
+
+
+#------ Decomposition ------
+n_lamb_sigma = [16,16,16]
+n_lamb_sh = [48,48,48]
+
+
+#------ Feature config ------
+view_pe = 2
+fea_pe = 6
+data_dim_color = 27
+
+
+#------ Mip nerf ------
+mip_nerf    = True
+randomized  = True
+ray_shape   = 'cone'
+num_levels  = 1
+
+
+#------ Frequence reg ------
+free_reg        = True
+freq_reg_ratio  = 0.8
+
+
+#------ Occlusion reg ------
+occ_reg_loss_mult   = 0.1
+occ_reg_range       = 20
+occ_wb_range        = 20
+occ_wb_prior        = False
+
+
+#------ L1 reg ------
+L1_weight_inital = 8e-5
+L1_weight_rest = 4e-5
+rm_weight_mask_thre = 1e-4
+
+
+## please uncomment following configuration if hope to training on cp model
+#model_name = TensorCP
+#n_lamb_sigma = [96]
+#n_lamb_sh = [288]
+#N_voxel_final = 125000000 # 500**3
+#L1_weight_inital = 1e-5
+#L1_weight_rest = 1e-5

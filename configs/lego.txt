@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name = blender
-datadir = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/lego
-expname =  lego
+datadir = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/ship
+expname =  ship
 basedir = ./log
 
 

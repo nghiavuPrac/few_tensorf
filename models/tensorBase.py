@@ -4,6 +4,30 @@ import torch.nn.functional as F
 from .sh import eval_sh_bases
 import numpy as np
 import time
+import torch.nn as nn
+
+class PositionalEncoding(nn.Module):
+    def __init__(self, min_deg, max_deg):
+        super(PositionalEncoding, self).__init__()
+        self.min_deg = min_deg
+        self.max_deg = max_deg
+        self.scales = nn.Parameter(torch.tensor([2 ** i for i in range(min_deg, max_deg)]), requires_grad=False)
+
+    def forward(self, x, y=None):
+        shape = list(x.shape[:-1]) + [-1]
+        x_enc = (x[..., None, :] * self.scales[:, None]).reshape(shape)
+        x_enc = torch.cat((x_enc, x_enc + 0.5 * torch.pi), -1)
+        if y is not None:
+            # IPE
+            y_enc = (y[..., None, :] * self.scales[:, None]**2).reshape(shape)
+            y_enc = torch.cat((y_enc, y_enc), -1)
+            x_ret = torch.exp(-0.5 * y_enc) * torch.sin(x_enc)
+            y_ret = torch.maximum(torch.zeros_like(y_enc), 0.5 * (1 - torch.exp(-2 * y_enc) * torch.cos(2 * x_enc)) - x_ret ** 2)
+            return x_ret, y_ret 
+        else:
+            # PE
+            x_ret = torch.sin(x_enc)
+            return x_ret
 
 def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
   if max_visible is None:
@@ -77,12 +101,17 @@ class AlphaGridMask(torch.nn.Module):
 
 
 class MLPRender_Fea(torch.nn.Module):
-    def __init__(self,inChanel, viewpe=6, feape=6, featureC=128):
+    def __init__(self,inChanel, viewpe=6, feape=6, featureC=128, encoder=None):
         super(MLPRender_Fea, self).__init__()
 
-        self.in_mlpC = 2*viewpe*3 + 2*feape*inChanel + 3 + inChanel
-        self.viewpe = viewpe
-        self.feape = feape
+        self.in_mlpC  = 2*viewpe*3 + 2*feape*inChanel + 3 + inChanel
+        self.viewpe   = viewpe
+        self.feape    = feape
+
+        self.encoder  = encoder
+        self.fea_encoder = self.encoder(0, feape)
+        self.view_encoder = self.encoder(0, viewpe)
+
         layer1 = torch.nn.Linear(self.in_mlpC, featureC)
         layer2 = torch.nn.Linear(featureC, featureC)
         layer3 = torch.nn.Linear(featureC,3)
@@ -93,7 +122,7 @@ class MLPRender_Fea(torch.nn.Module):
     def forward(self, pts, viewdirs, features, step, total_step):
         indata = [features, viewdirs]
         if self.feape > 0:
-            encode = positional_encoding(features, self.feape)
+            encode = self.fea_encoder(features)
 
             if step == -1:    
                 indata += [encode]
@@ -102,7 +131,7 @@ class MLPRender_Fea(torch.nn.Module):
                 indata += [encode*mask]
             
         if self.viewpe > 0:
-            encode = positional_encoding(viewdirs, self.viewpe)
+            encode = self.view_encoder(viewdirs)
 
             if step == -1:
                 indata += [encode]
@@ -114,15 +143,21 @@ class MLPRender_Fea(torch.nn.Module):
         rgb = self.mlp(mlp_in)
         rgb = torch.sigmoid(rgb)
 
+        exit()
         return rgb
 
 class MLPRender_PE(torch.nn.Module):
-    def __init__(self,inChanel, viewpe=6, pospe=6, featureC=128):
+    def __init__(self,inChanel, viewpe=6, pospe=6, featureC=128, encoder=None):
         super(MLPRender_PE, self).__init__()
 
         self.in_mlpC = (3+2*viewpe*3)+ (3+2*pospe*3)  + inChanel #
         self.viewpe = viewpe
         self.pospe = pospe
+
+        self.encoder  = encoder
+        self.fea_encoder = self.encoder(0, pospe)
+        self.view_encoder = self.encoder(0, viewpe)
+
         layer1 = torch.nn.Linear(self.in_mlpC, featureC)
         layer2 = torch.nn.Linear(featureC, featureC)
         layer3 = torch.nn.Linear(featureC,3)
@@ -134,7 +169,15 @@ class MLPRender_PE(torch.nn.Module):
         indata = [features, viewdirs]
         if self.pospe > 0:
           
-            encode = positional_encoding(pts, self.pospe)
+            if len(pts) == 2:
+                mean = pts[0]
+                var = pts[1]
+                encode = self.encoder(mean, var)
+            else:
+                pts = pts[0]
+                encode = self.encoder(pts)
+
+
             if step == -1:    
                 indata += [encode]
             else:
@@ -157,12 +200,12 @@ class MLPRender_PE(torch.nn.Module):
         return rgb
 
 class MLPRender(torch.nn.Module):
-    def __init__(self,inChanel, viewpe=6, featureC=128):
+    def __init__(self,inChanel, viewpe=6, featureC=128, encoder=None):
         super(MLPRender, self).__init__()
 
         self.in_mlpC = (3+2*viewpe*3) + inChanel
         self.viewpe = viewpe
-        
+        self.encoder  = encoder
         layer1 = torch.nn.Linear(self.in_mlpC, featureC)
         layer2 = torch.nn.Linear(featureC, featureC)
         layer3 = torch.nn.Linear(featureC,3)
@@ -205,7 +248,7 @@ class TensorBase(torch.nn.Module):
         self.near_far = near_far
         self.step_ratio = step_ratio
 
-
+        self.encoder = PositionalEncoding
         self.update_stepSize(gridSize)
 
         self.matMode = [[0,1], [0,2], [1,2]]
@@ -216,15 +259,15 @@ class TensorBase(torch.nn.Module):
         self.init_svd_volume(gridSize[0], device)
 
         self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = shadingMode, pos_pe, view_pe, fea_pe, featureC
-        self.init_render_func(shadingMode, pos_pe, view_pe, fea_pe, featureC, device)
+        self.init_render_func(shadingMode, pos_pe, view_pe, fea_pe, featureC, device, self.encoder)
 
-    def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device):
+    def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device, encoder):
         if shadingMode == 'MLP_PE':
-            self.renderModule = MLPRender_PE(self.app_dim, view_pe, pos_pe, featureC).to(device)
+            self.renderModule = MLPRender_PE(self.app_dim, view_pe, pos_pe, featureC, encoder).to(device)
         elif shadingMode == 'MLP_Fea':
-            self.renderModule = MLPRender_Fea(self.app_dim, view_pe, fea_pe, featureC).to(device)
+            self.renderModule = MLPRender_Fea(self.app_dim, view_pe, fea_pe, featureC, encoder).to(device)
         elif shadingMode == 'MLP':
-            self.renderModule = MLPRender(self.app_dim, view_pe, featureC).to(device)
+            self.renderModule = MLPRender(self.app_dim, view_pe, featureC, encoder).to(device)
         elif shadingMode == 'SH':
             self.renderModule = SHRender
         elif shadingMode == 'RGB':
@@ -765,7 +808,11 @@ class TensorBase(torch.nn.Module):
 
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
-            valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_step)
+
+            if mip:
+                valid_rgbs = self.renderModule([xyz_sampled[app_mask], var], viewdirs[app_mask], app_features, step, total_step)
+            else:
+                valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_step)
             rgb[app_mask] = valid_rgbs
 
         acc_map = torch.sum(weight, -1)
