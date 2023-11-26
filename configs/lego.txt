@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name = blender
-datadir = /content/drive/MyDrive/NeRF_Data/nerf_synthetic/ship
-expname =  ship
+datadir = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
+expname =  lego
 basedir = ./log
 
 
@@ -11,7 +11,7 @@ N_test_imgs   = 25
 
 
 #------ Config parameters ------
-n_iters = 15000
+n_iters = 1000
 batch_size = 1024
 step_ratio = 1.5
 
@@ -26,7 +26,7 @@ downsample_train        = 2
 
 #------ Model name ------
 model_name    = TensorVMSplit
-shadingMode   = MLP_Fea
+shadingMode   = MLP_PE
 fea2denseAct  = softplus
 overwrt       = True 
 
@@ -54,7 +54,7 @@ data_dim_color = 27
 
 
 #------ Mip nerf ------
-mip_nerf    = True
+mip_nerf    = False
 randomized  = True
 ray_shape   = 'cone'
 num_levels  = 1

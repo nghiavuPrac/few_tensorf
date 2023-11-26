@@ -143,18 +143,18 @@ class MLPRender_Fea(torch.nn.Module):
         rgb = self.mlp(mlp_in)
         rgb = torch.sigmoid(rgb)
 
-        exit()
         return rgb
 
 class MLPRender_PE(torch.nn.Module):
     def __init__(self,inChanel, viewpe=6, pospe=6, featureC=128, encoder=None):
         super(MLPRender_PE, self).__init__()
 
-        self.in_mlpC = (3+2*viewpe*3)+ (3+2*pospe*3)  + inChanel #
+        self.in_mlpC = (2*viewpe*3)+ (3+2*pospe*3)  + inChanel #
         self.viewpe = viewpe
         self.pospe = pospe
 
         self.encoder  = encoder
+        self.pos_encoder = self.encoder(0, pospe)
         self.fea_encoder = self.encoder(0, pospe)
         self.view_encoder = self.encoder(0, viewpe)
 
@@ -172,10 +172,10 @@ class MLPRender_PE(torch.nn.Module):
             if len(pts) == 2:
                 mean = pts[0]
                 var = pts[1]
-                encode = self.encoder(mean, var)
+                encode, _ = self.pos_encoder(mean, var)
             else:
                 pts = pts[0]
-                encode = self.encoder(pts)
+                encode = self.pos_encoder(pts)
 
 
             if step == -1:    
@@ -810,9 +810,9 @@ class TensorBase(torch.nn.Module):
             app_features = self.compute_appfeature(xyz_sampled[app_mask])
 
             if mip:
-                valid_rgbs = self.renderModule([xyz_sampled[app_mask], var], viewdirs[app_mask], app_features, step, total_step)
+                valid_rgbs = self.renderModule([xyz_sampled[app_mask], var[app_mask]], viewdirs[app_mask], app_features, step, total_step)
             else:
-                valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, step, total_step)
+                valid_rgbs = self.renderModule([xyz_sampled[app_mask]], viewdirs[app_mask], app_features, step, total_step)
             rgb[app_mask] = valid_rgbs
 
         acc_map = torch.sum(weight, -1)
