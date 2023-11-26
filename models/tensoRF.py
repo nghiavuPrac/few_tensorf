@@ -1,5 +1,24 @@
 from .tensorBase import *
 
+def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
+  if max_visible is None:
+    # default FreeNeRF
+    dv = 10
+    if current_iter < total_reg_iter:
+      freq_mask = torch.zeros(pos_enc_length).to(device)  # all invisible
+      ptr = pos_enc_length / dv * current_iter / total_reg_iter + 1 
+      ptr = ptr if ptr < pos_enc_length / dv else pos_enc_length / dv
+      int_ptr = int(ptr)
+      freq_mask[: int_ptr * dv] = 1.0  # assign the integer part
+      freq_mask[int_ptr * dv : int_ptr * dv + 3] = (ptr - int_ptr)  # assign the fractional part
+      return torch.clamp(freq_mask, 1e-8, 1 - 1e-8)
+    else:
+      return torch.ones(pos_enc_length).to(device)
+  else:
+    # For the ablation study that controls the maximum visible range of frequency spectrum
+    freq_mask = torch.zeros(pos_enc_length).to(device)
+    freq_mask[: int(pos_enc_length * max_visible)] = 1.0
+    return freq_mask
 
 class TensorVM(TensorBase):
     def __init__(self, aabb, gridSize, device, **kargs):
@@ -202,7 +221,7 @@ class TensorVMSplit(TensorBase):
             total = total + reg(self.app_plane[idx]) * 1e-2 #+ reg(self.app_line[idx]) * 1e-3
         return total
 
-    def compute_densityfeature(self, xyz_sampled):
+    def compute_densityfeature(self, xyz_sampled, step=-1, total_step=1):
 
         # plane + line basis
         coordinate_plane = torch.stack((xyz_sampled[..., self.matMode[0]], xyz_sampled[..., self.matMode[1]], xyz_sampled[..., self.matMode[2]])).detach().view(3, -1, 1, 2)
@@ -214,13 +233,19 @@ class TensorVMSplit(TensorBase):
             plane_coef_point = F.grid_sample(self.density_plane[idx_plane], coordinate_plane[[idx_plane]],
                                                 align_corners=True).view(-1, *xyz_sampled.shape[:1])
             line_coef_point = F.grid_sample(self.density_line[idx_plane], coordinate_line[[idx_plane]],
-                                            align_corners=True).view(-1, *xyz_sampled.shape[:1])
-            sigma_feature = sigma_feature + torch.sum(plane_coef_point * line_coef_point, dim=0)
+                                            align_corners=True).view(-1, *xyz_sampled.shape[:1])                                                                                            
+
+            if step==-1:
+                sigma_feature = sigma_feature + torch.sum(plane_coef_point * line_coef_point, dim=0)
+            else:
+                plane_mask = get_freq_reg_mask(plane_coef_point.shape[0], step, total_step, None, device=plane_coef_point.device)[..., None]
+                line_mask = get_freq_reg_mask(line_coef_point.shape[0], step, total_step, None, device=line_coef_point.device)[..., None]#.tile((line_coef_point.shape[1], 1)) 
+                sigma_feature = sigma_feature + torch.sum((plane_coef_point*plane_mask) * (line_coef_point*line_mask), dim=0)
 
         return sigma_feature
 
 
-    def compute_appfeature(self, xyz_sampled):
+    def compute_appfeature(self, xyz_sampled, step, total_step):
 
         # plane + line basis
         coordinate_plane = torch.stack((xyz_sampled[..., self.matMode[0]], xyz_sampled[..., self.matMode[1]], xyz_sampled[..., self.matMode[2]])).detach().view(3, -1, 1, 2)
@@ -229,15 +254,22 @@ class TensorVMSplit(TensorBase):
 
         plane_coef_point,line_coef_point = [],[]
         for idx_plane in range(len(self.app_plane)):
-            plane_coef_point.append(F.grid_sample(self.app_plane[idx_plane], coordinate_plane[[idx_plane]],
-                                                align_corners=True).view(-1, *xyz_sampled.shape[:1]))
-            line_coef_point.append(F.grid_sample(self.app_line[idx_plane], coordinate_line[[idx_plane]],
-                                            align_corners=True).view(-1, *xyz_sampled.shape[:1]))
+            plane_coef = F.grid_sample(self.app_plane[idx_plane], coordinate_plane[[idx_plane]],
+                                                align_corners=True).view(-1, *xyz_sampled.shape[:1])
+            line_coef = F.grid_sample(self.app_line[idx_plane], coordinate_line[[idx_plane]],
+                                            align_corners=True).view(-1, *xyz_sampled.shape[:1])                                                
+            if step==-1:
+                plane_coef_point.append(plane_coef)
+                line_coef_point.append(line_coef)
+            else:
+                plane_mask = get_freq_reg_mask(plane_coef.shape[0], step, total_step, None, device=plane_coef.device)[..., None]#.tile((plane_coef_point.shape[1], 1)) 
+                line_mask = get_freq_reg_mask(line_coef.shape[0], step, total_step, None, device=line_coef.device)[..., None]#.tile((plane_coef_point.shape[1], 1)) 
+                plane_coef_point.append(plane_coef*plane_mask)
+                line_coef_point.append(line_coef*line_mask)
+            
         plane_coef_point, line_coef_point = torch.cat(plane_coef_point), torch.cat(line_coef_point)
 
-
         return self.basis_mat((plane_coef_point * line_coef_point).T)
-
 
 
     @torch.no_grad()

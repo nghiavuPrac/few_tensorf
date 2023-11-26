@@ -24,16 +24,19 @@ def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096
     return torch.cat(rgbs), torch.cat(all_rgbs), torch.cat(depth_maps), torch.cat(weights), None
 
 def create_gif(path_to_dir, name_gif):
-    filenames = os.listdir(path_to_dir)
-    filenames = sorted(filenames, key=lambda x: int(x.split('.')[0]))
-    images = []
-    for filename in filenames:
-        images.append(imageio.imread(f'{path_to_dir}/{filename}'))
-    kargs = {"duration": 1.0}
-    imageio.mimsave(name_gif, images, "GIF", **kargs)
+    if os.path.exists(path_to_dir):
+        filenames = os.listdir(path_to_dir)
+        filenames = sorted(filenames, key=lambda x: int(x.split('.')[0]))
+        images = []
+        for filename in filenames:
+            images.append(imageio.imread(f'{path_to_dir}/{filename}'))
+        kargs = {"duration": 5.0}
+        imageio.mimsave(name_gif, images, "GIF", **kargs)
+    else:
+        return
 
 @torch.no_grad()
-def PSNRs_calculate(dataset,tensorf, args, renderer, N_samples=-1,
+def PSNRs_calculate(dataset,tensorf, args, renderer, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=False, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -51,7 +54,7 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, N_samples=-1,
         W, H = dataset.img_wh
         rays = samples.to(device).view(-1,samples.shape[-1])
 
-        rgb_map, alphas_map, depth_map, weights, uncertainty = renderer(rays, tensorf, chunk=4096, N_samples=N_samples,
+        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
 
         
@@ -76,7 +79,7 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, N_samples=-1,
     return PSNRs
 
 @torch.no_grad()
-def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, step, logs, savePath=None, N_samples=-1,
+def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, step, logs, savePath=None, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -95,12 +98,12 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
     train_rgb_map = None
     train_depth_map = None
     img_eval_interval = 1
-    for idx, samples in enumerate(train_dataset.all_rays[0::img_eval_interval].to(device)):
+    for idx, samples in enumerate(train_dataset.all_rays[0::img_eval_interval]):
 
         W, H = train_dataset.img_wh
-        rays = samples.to(device).view(-1,samples.shape[-1])
+        rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=4096, N_samples=N_samples,
+        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
 
         rgb_map = rgb_map.clamp(0.0, 1.0)
@@ -119,12 +122,12 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
     test_rgb_map = None
     test_depth_map = None
 
-    for idx, samples in enumerate(test_dataset.all_rays[0::img_eval_interval].to(device)):
+    for idx, samples in enumerate(test_dataset.all_rays[0::img_eval_interval]):
 
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=4096, N_samples=N_samples,
+        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
 
         rgb_map = rgb_map.clamp(0.0, 1.0)
@@ -171,7 +174,7 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         plt.close()     
 
 @torch.no_grad()
-def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
+def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -191,7 +194,7 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=4096, N_samples=N_samples,
+        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
@@ -237,7 +240,7 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
     return PSNRs
 
 @torch.no_grad()
-def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5, prtx='', N_samples=-1,
+def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
                     white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -260,7 +263,7 @@ def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5
             rays_o, rays_d = ndc_rays_blender(H, W, test_dataset.focal[0], 1.0, rays_o, rays_d)
         rays = torch.cat([rays_o, rays_d], 1)  # (h*w, 6)
 
-        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=8192, N_samples=N_samples,
+        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
         rgb_map = rgb_map.clamp(0.0, 1.0)
 

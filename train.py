@@ -133,8 +133,9 @@ def reconstruction(args):
     dataset = dataset_dict[args.dataset_name]
 
     # Load data
-    idxs = [26, 86, 2, 55, 75, 16, 73, 93]
-    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, indexs=idxs)
+    # idxs = [26, 86, 2, 55, 75, 16, 73, 93]
+    # train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, indexs=idxs)
+    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=8)
     test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=10)
     final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
 
@@ -322,6 +323,7 @@ def reconstruction(args):
                   tensorf, 
                   args, 
                   renderer, 
+                  chunk=args.batch_size,
                   N_samples=nSamples,
                   white_bg=white_bg, 
                   ndc_ray=ndc_ray, 
@@ -343,6 +345,7 @@ def reconstruction(args):
               step                = iteration,
               logs                = history,
               savePath            = f'{logfolder}/gif/',
+              chunk               =args.batch_size,
               N_samples           = nSamples, 
               white_bg            = white_bg, 
               ndc_ray             = ndc_ray,
@@ -350,6 +353,8 @@ def reconstruction(args):
               )
 
             PSNRs_train = []
+
+
 
 
         if iteration in update_AlphaMask_list:

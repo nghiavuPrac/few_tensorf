@@ -1,19 +1,19 @@
 #------ Folder ------ 
 dataset_name = blender
-datadir = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
-expname =  lego
+datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0525_800_800_30_3S_raw
+expname = human
 basedir = ./log
 
 
 #------ Number images ------
-N_train_imgs  = 8
-N_test_imgs   = 25
+N_train_imgs  = 5
+N_test_imgs   = 10
 
 
 #------ Config parameters ------
-n_iters = 1000
+n_iters = 15000
 batch_size = 1024
-step_ratio = 1.5
+step_ratio = 1
 
 
 #------ Resolution ------
@@ -21,20 +21,20 @@ N_voxel_init            = 2097156 # 128**3 2097156
 N_voxel_final           = 27000000 # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]
 update_AlphaMask_list   = [2000,4000]
-downsample_train        = 2
+downsample_train        = 1
 
 
 #------ Model name ------
 model_name    = TensorVMSplit
-shadingMode   = MLP_PE
+shadingMode   = MLP_Fea
 fea2denseAct  = softplus
 overwrt       = True 
 
 
 #------ Test ------
 N_vis             = 5
-vis_every         = 1000
-train_vis_every   = 1000
+vis_every         = 2000
+train_vis_every   = 2000
 
 
 #------ Render ------
@@ -43,8 +43,8 @@ export_mesh   = True
 
 
 #------ Decomposition ------
-n_lamb_sigma = [16,16,16]
-n_lamb_sh = [48,48,48]
+n_lamb_sigma = [48, 48, 48]
+n_lamb_sh = [96, 96, 96]
 
 
 #------ Feature config ------

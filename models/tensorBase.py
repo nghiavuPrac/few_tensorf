@@ -796,7 +796,7 @@ class TensorBase(torch.nn.Module):
 
         if ray_valid.any():
             xyz_sampled = self.normalize_coord(xyz_sampled)
-            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid])
+            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], step, total_step)
 
             validsigma = self.feature2density(sigma_feature)
             sigma[ray_valid] = validsigma
@@ -807,7 +807,7 @@ class TensorBase(torch.nn.Module):
         app_mask = weight > self.rayMarch_weight_thres
 
         if app_mask.any():
-            app_features = self.compute_appfeature(xyz_sampled[app_mask])
+            app_features = self.compute_appfeature(xyz_sampled[app_mask], step, total_step)
 
             if mip:
                 valid_rgbs = self.renderModule([xyz_sampled[app_mask], var[app_mask]], viewdirs[app_mask], app_features, step, total_step)
