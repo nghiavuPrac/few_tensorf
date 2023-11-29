@@ -32,7 +32,7 @@ class PositionalEncoding(nn.Module):
 def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
   if max_visible is None:
     # default FreeNeRF
-    dv = 10
+    dv = 5
     if current_iter < total_reg_iter:
       freq_mask = torch.zeros(pos_enc_length).to(device)  # all invisible
       ptr = pos_enc_length / dv * current_iter / total_reg_iter + 1 
@@ -749,7 +749,7 @@ class TensorBase(torch.nn.Module):
         viewdirs = rays_chunk[:, 3:6]
 
         if mip:
-            num_level = 2
+            num_level = self.args.num_levels
         else:
             num_level = 1
 
@@ -789,7 +789,7 @@ class TensorBase(torch.nn.Module):
                 dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
                 ray_valid = ~mask_outbbox 
             else:
-                xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
+                xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train, N_samples=N_samples)
                 dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
             
             exp_viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
@@ -839,8 +839,7 @@ class TensorBase(torch.nn.Module):
                 depth_map = torch.sum(weight * z_vals, -1)
                 depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
 
-            ret.append((rgb_map, rgb, depth_map, alpha))
-
+            ret.append((rgb_map, rgb, depth_map, weight))
 
         # return rgb_map, rgb, depth_map, alpha #, rgb, alpha #, sigma, weight, bg_weight
         return ret

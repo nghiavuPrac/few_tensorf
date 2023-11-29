@@ -84,9 +84,12 @@ class BlenderDataset(Dataset):
                 c2w = torch.FloatTensor(pose)
                 self.poses += [c2w]
 
-                file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
+                file_path = frame['file_path'].split('.')[-1]
+                image_path = self.root_dir + file_path + '.png'
+
+                """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
                 image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
-                self.image_paths += [image_path]
+                self.image_paths += [image_path]"""
                 img = Image.open(image_path)
 
                 if self.enhance != None:
@@ -122,11 +125,11 @@ class BlenderDataset(Dataset):
                 c2w = torch.FloatTensor(pose)
                 self.poses += [c2w]
 
-                """file_path = frame['file_path'].split('.')[-1]
-                image_path = self.root_dir + file_path + '.png'"""
+                file_path = frame['file_path'].split('.')[-1]
+                image_path = self.root_dir + file_path + '.png'
 
-                file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
-                image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
+                """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
+                image_path = os.path.join(self.root_dir, self.split, file_path+'.png')"""
                 
                 self.image_paths += [image_path]
                 img = Image.open(image_path)

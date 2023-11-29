@@ -3,7 +3,7 @@ from .tensorBase import *
 def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
   if max_visible is None:
     # default FreeNeRF
-    dv = 10
+    dv = 5
     if current_iter < total_reg_iter:
       freq_mask = torch.zeros(pos_enc_length).to(device)  # all invisible
       ptr = pos_enc_length / dv * current_iter / total_reg_iter + 1 
@@ -21,8 +21,8 @@ def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=
     return freq_mask
 
 class TensorVM(TensorBase):
-    def __init__(self, aabb, gridSize, device, **kargs):
-        super(TensorVM, self).__init__(aabb, gridSize, device, **kargs)
+    def __init__(self, args, aabb, gridSize, device, **kargs):
+        super(TensorVM, self).__init__(args, aabb, gridSize, device, **kargs)
         
 
     def init_svd_volume(self, res, device):
