@@ -9,19 +9,27 @@ from dataLoader.ray_utils import ndc_rays_blender
 
 def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096, N_samples=-1, ndc_ray=False, mip=False, white_bg=True, is_train=False, device='cuda'):
 
-    rgbs, all_rgbs, depth_maps, weights, uncertainties = [], [], [], [], []
+    rgbss, all_rgbss, depth_mapss, weightss, uncertainties = [], [], [], [], []
+    
     N_rays_all = rays.shape[0]
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-    
-        rgb_map, all_rgb, depth_map, weight = tensorf(rays_chunk, step, total_step, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, mip=mip, N_samples=N_samples)
+        rgbs, all_rgbs, depth_maps, weights = [], [], [], []
+        for res in tensorf(rays_chunk, step, total_step, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, mip=mip, N_samples=N_samples):
+        
+            rgb_map, all_rgb, depth_map, weight = res
+            rgbs.append(rgb_map[None, ...])
+            all_rgbs.append(all_rgb[None, ...])
+            depth_maps.append(depth_map[None, ...])
+            weights.append(weight[None, ...])
+        
 
-        rgbs.append(rgb_map)
-        all_rgbs.append(all_rgb)
-        depth_maps.append(depth_map)
-        weights.append(weight)
-    
-    return torch.cat(rgbs), torch.cat(all_rgbs), torch.cat(depth_maps), torch.cat(weights), None
+        rgbss.append(torch.cat(rgbs))
+        all_rgbss.append(torch.cat(all_rgbs))
+        depth_mapss.append(torch.cat(depth_maps))
+        weightss.append(torch.cat(weights))
+
+    return torch.cat(rgbss, 1), torch.cat(all_rgbss, 1), torch.cat(depth_mapss, 1), torch.cat(weightss, 1), None
 
 def create_gif(path_to_dir, name_gif):
     if os.path.exists(path_to_dir):
@@ -36,7 +44,7 @@ def create_gif(path_to_dir, name_gif):
         return
 
 @torch.no_grad()
-def PSNRs_calculate(dataset,tensorf, args, renderer, chunk=4096, N_samples=-1,
+def PSNRs_calculate(dataset,tensorf, args, renderer, mip=False, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=False, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -55,8 +63,10 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, chunk=4096, N_samples=-1,
         rays = samples.to(device).view(-1,samples.shape[-1])
 
         rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+                                        ndc_ray=ndc_ray, mip=mip, white_bg = white_bg, device=device)        
 
+        rgb_map = rgb_map[-1].squeeze()
+        depth_map = depth_map[-1].squeeze()
         
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
@@ -80,7 +90,7 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, chunk=4096, N_samples=-1,
 
 @torch.no_grad()
 def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, step, logs, savePath=None, chunk=4096, N_samples=-1,
-               white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
+               white_bg=False, ndc_ray=False, mip=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
     os.makedirs(savePath, exist_ok=True)
@@ -103,8 +113,11 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         W, H = train_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=chunk, N_samples=N_samples,
+        rgb_map, _, disp_map, _, _ = renderer(rays, tensorf, step=-1, mip=mip, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+
+        rgb_map = rgb_map[-1].squeeze()
+        disp_map = disp_map[-1].squeeze()
 
         rgb_map = rgb_map.clamp(0.0, 1.0)
 

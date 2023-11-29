@@ -156,8 +156,8 @@ class TensorVM(TensorBase):
 
 
 class TensorVMSplit(TensorBase):
-    def __init__(self, aabb, gridSize, device, **kargs):
-        super(TensorVMSplit, self).__init__(aabb, gridSize, device, **kargs)
+    def __init__(self, args, aabb, gridSize, device, **kargs):
+        super(TensorVMSplit, self).__init__(args, aabb, gridSize, device, **kargs)
 
 
     def init_svd_volume(self, res, device):

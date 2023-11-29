@@ -135,8 +135,8 @@ def reconstruction(args):
     # Load data
     # idxs = [26, 86, 2, 55, 75, 16, 73, 93]
     # train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, indexs=idxs)
-    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=8)
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=10)
+    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_train_imgs)
+    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
     final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
 
     # Observation
@@ -186,7 +186,7 @@ def reconstruction(args):
         tensorf = eval(args.model_name)(**kwargs)
         tensorf.load(ckpt)
     else:
-        tensorf = eval(args.model_name)(aabb, reso_cur, device,
+        tensorf = eval(args.model_name)(args, aabb, reso_cur, device,
                     density_n_comp=n_lamb_sigma, appearance_n_comp=n_lamb_sh, app_dim=args.data_dim_color, near_far=near_far,
                     shadingMode=args.shadingMode, alphaMask_thres=args.alpha_mask_thre, density_shift=args.density_shift, distance_scale=args.distance_scale,
                     pos_pe=args.pos_pe, view_pe=args.view_pe, fea_pe=args.fea_pe, featureC=args.featureC, step_ratio=args.step_ratio, fea2denseAct=args.fea2denseAct)
@@ -246,8 +246,19 @@ def reconstruction(args):
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         rgb_map, all_rgbs, depth_map, weights, uncertainty = renderer(rays_train, tensorf, step, args.n_iters, chunk=args.batch_size,
                                 N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray, mip=args.mip_nerf, device=device, is_train=True)
+        
+        all_rgbs = all_rgbs[-1].squeeze()
+        depth_map = depth_map[-1].squeeze()
+        weights = weights[-1].squeeze()
 
-        loss = torch.mean((rgb_map - rgb_train) ** 2)
+        losses = []
+        for rgb in rgb_map:
+            losses.append(torch.mean((rgb - rgb_train)**2))
+
+        # coarse_loss_mult
+        loss = 0.1 * torch.sum(torch.Tensor(losses[:-1])) + losses[-1]
+
+        # loss = torch.mean((rgb_map - rgb_train) ** 2)
 
 
         # loss
@@ -327,6 +338,7 @@ def reconstruction(args):
                   N_samples=nSamples,
                   white_bg=white_bg, 
                   ndc_ray=ndc_ray, 
+                  mip=args.mip_nerf,
                   device=device)
             history['iteration'].append(iteration)
             history['train_psnr'].append(round(float(np.mean(PSNRs_train)), 2))
@@ -345,10 +357,11 @@ def reconstruction(args):
               step                = iteration,
               logs                = history,
               savePath            = f'{logfolder}/gif/',
-              chunk               =args.batch_size,
+              chunk               = args.batch_size,
               N_samples           = nSamples, 
               white_bg            = white_bg, 
               ndc_ray             = ndc_ray,
+              mip                 = args.mip_nerf,
               device              = device
               )
 

@@ -225,12 +225,14 @@ class MLPRender(torch.nn.Module):
 
 
 class TensorBase(torch.nn.Module):
-    def __init__(self, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 27,
+    def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 27,
                     shadingMode = 'MLP_PE', alphaMask = None, near_far=[2.0,6.0],
                     density_shift = -10, alphaMask_thres=0.001, distance_scale=25, rayMarch_weight_thres=0.0001,
                     pos_pe = 6, view_pe = 6, fea_pe = 6, featureC=128, step_ratio=2.0,
                     fea2denseAct = 'softplus'):
         super(TensorBase, self).__init__()
+
+        self.args = args
 
         self.density_n_comp = density_n_comp
         self.app_n_comp = appearance_n_comp
@@ -745,88 +747,101 @@ class TensorBase(torch.nn.Module):
         # sample points
         origins = rays_chunk[:, :3]
         viewdirs = rays_chunk[:, 3:6]
-        if ndc_ray:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
-            dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
-            rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
-            dists = dists * rays_norm
-            viewdirs = viewdirs / rays_norm
-        elif mip:
-            dx = torch.sqrt(torch.sum((viewdirs[:-1, :] - viewdirs[1:, :]) ** 2, -1))            
-            dx = torch.cat([dx, dx[-2:-1]], 0)
 
-            radii = (dx * 2 / np.sqrt(12))[:, None]
-            near, far = self.near_far 
-            ones = torch.ones_like(radii[..., :1])
-
-            """if l == 0:
-                t_vals, (mean, var) = self.sample_along_rays(origins, viewdirs, radii, N_samples,
-                                                            ones * near, ones * far, randomized=self.randomized, lindisp=False,
-                                                            ray_shape=self.ray_shape)
-            else:
-                t_vals, (mean, var) = self.resample_along_rays(origins, viewdirs, radii,
-                                                      t_vals.to(origins.device),
-                                                      weight.to(origins.device), randomized=self.randomized,
-                                                      stop_grad=True, resample_padding=0.01,
-                                                      ray_shape=self.ray_shape)"""
-            t_vals, (mean, var) = self.sample_along_rays(origins, viewdirs, radii, N_samples,
-                                                            ones * near, ones * far, randomized=randomized, lindisp=False,
-                                                            ray_shape=ray_shape)                                                      
-                                  
-            xyz_sampled = mean   
-            z_vals = 0.5 * (t_vals[..., 1:] + t_vals[..., :-1])                                                                 
-            mask_outbbox = ((self.aabb[0]>xyz_sampled) | (xyz_sampled>self.aabb[1])).any(dim=-1)
-            dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
-            ray_valid = ~mask_outbbox 
+        if mip:
+            num_level = 2
         else:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
-            dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
-        viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
-        
-        if self.alphaMask is not None:
-            alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid])
-            alpha_mask = alphas > 0
-            ray_invalid = ~ray_valid
-            ray_invalid[ray_valid] |= (~alpha_mask)
-            ray_valid = ~ray_invalid
+            num_level = 1
 
+        ret = []
+        for i_level in range(num_level):
+            if ndc_ray:
+                xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
+                dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
+                rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
+                dists = dists * rays_norm
+                viewdirs = viewdirs / rays_norm
+            elif mip:
+                dx = torch.sqrt(torch.sum((viewdirs[:-1, :] - viewdirs[1:, :]) ** 2, -1))            
+                dx = torch.cat([dx, dx[-2:-1]], 0)
 
-        sigma = torch.zeros(xyz_sampled.shape[:-1], device=xyz_sampled.device)
-        rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
+                radii = (dx * 2 / np.sqrt(12))[:, None]
+                near, far = self.near_far 
+                ones = torch.ones_like(radii[..., :1])
 
-        if ray_valid.any():
-            xyz_sampled = self.normalize_coord(xyz_sampled)
-            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], step, total_step)
-
-            validsigma = self.feature2density(sigma_feature)
-            sigma[ray_valid] = validsigma
-
-
-        alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
-
-        app_mask = weight > self.rayMarch_weight_thres
-
-        if app_mask.any():
-            app_features = self.compute_appfeature(xyz_sampled[app_mask], step, total_step)
-
-            if mip:
-                valid_rgbs = self.renderModule([xyz_sampled[app_mask], var[app_mask]], viewdirs[app_mask], app_features, step, total_step)
+                if i_level == 0:
+                    t_vals, (mean, var) = self.sample_along_rays(origins, viewdirs, radii, N_samples,
+                                                                ones * near, ones * far, randomized=self.args.randomized, lindisp=False,
+                                                                ray_shape=self.args.ray_shape)
+                else:
+                    t_vals, (mean, var) = self.resample_along_rays(origins, viewdirs, radii,
+                                                          t_vals.to(origins.device),
+                                                          weight.to(origins.device), randomized=self.args.randomized,
+                                                          stop_grad=True, resample_padding=0.01,
+                                                          ray_shape=self.args.ray_shape)
+                """t_vals, (mean, var) = self.sample_along_rays(origins, viewdirs, radii, N_samples,
+                                                                ones * near, ones * far, randomized=randomized, lindisp=False,
+                                                                ray_shape=ray_shape)"""
+                                      
+                xyz_sampled = mean   
+                z_vals = 0.5 * (t_vals[..., 1:] + t_vals[..., :-1])                                                                 
+                mask_outbbox = ((self.aabb[0]>xyz_sampled) | (xyz_sampled>self.aabb[1])).any(dim=-1)
+                dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
+                ray_valid = ~mask_outbbox 
             else:
-                valid_rgbs = self.renderModule([xyz_sampled[app_mask]], viewdirs[app_mask], app_features, step, total_step)
-            rgb[app_mask] = valid_rgbs
+                xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
+                dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
+            
+            exp_viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
+            
+            if self.alphaMask is not None:
+                alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid])
+                alpha_mask = alphas > 0
+                ray_invalid = ~ray_valid
+                ray_invalid[ray_valid] |= (~alpha_mask)
+                ray_valid = ~ray_invalid
 
-        acc_map = torch.sum(weight, -1)
-        rgb_map = torch.sum(weight[..., None] * rgb, -2)
 
-        if white_bg or (is_train and torch.rand((1,))<0.5):
-            rgb_map = rgb_map + (1. - acc_map[..., None])
+            sigma = torch.zeros(xyz_sampled.shape[:-1], device=xyz_sampled.device)
+            rgb = torch.zeros((*xyz_sampled.shape[:2], 3), device=xyz_sampled.device)
 
-        
-        rgb_map = rgb_map.clamp(0,1)
+            if ray_valid.any():
+                xyz_sampled = self.normalize_coord(xyz_sampled)
+                sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], step, total_step)
 
-        with torch.no_grad():
-            depth_map = torch.sum(weight * z_vals, -1)
-            depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
+                validsigma = self.feature2density(sigma_feature)
+                sigma[ray_valid] = validsigma
 
-        return rgb_map, rgb, depth_map, alpha #, rgb, alpha #, sigma, weight, bg_weight
+
+            alpha, weight, bg_weight = raw2alpha(sigma, dists * self.distance_scale)
+
+            app_mask = weight > self.rayMarch_weight_thres
+
+            if app_mask.any():
+                app_features = self.compute_appfeature(xyz_sampled[app_mask], step, total_step)
+
+                if mip:
+                    valid_rgbs = self.renderModule([xyz_sampled[app_mask], var[app_mask]], exp_viewdirs[app_mask], app_features, step, total_step)
+                else:
+                    valid_rgbs = self.renderModule([xyz_sampled[app_mask]], exp_viewdirs[app_mask], app_features, step, total_step)
+                rgb[app_mask] = valid_rgbs
+
+            acc_map = torch.sum(weight, -1)
+            rgb_map = torch.sum(weight[..., None] * rgb, -2)
+
+            if white_bg or (is_train and torch.rand((1,))<0.5):
+                rgb_map = rgb_map + (1. - acc_map[..., None])
+
+            
+            rgb_map = rgb_map.clamp(0,1)
+
+            with torch.no_grad():
+                depth_map = torch.sum(weight * z_vals, -1)
+                depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
+
+            ret.append((rgb_map, rgb, depth_map, alpha))
+
+
+        # return rgb_map, rgb, depth_map, alpha #, rgb, alpha #, sigma, weight, bg_weight
+        return ret
 
