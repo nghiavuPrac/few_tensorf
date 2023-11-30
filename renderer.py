@@ -6,31 +6,6 @@ from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGr
 from utils import *
 from dataLoader.ray_utils import ndc_rays_blender
 
-
-"""def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096, N_samples=-1, ndc_ray=False, mip=False, white_bg=True, is_train=False, device='cuda'):
-
-    rgbss, all_rgbss, depth_mapss, weightss, uncertainties = [], [], [], [], []
-    
-    N_rays_all = rays.shape[0]
-    for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
-        rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-        rgbs, all_rgbs, depth_maps, weights = [], [], [], []
-        for res in tensorf(rays_chunk, step, total_step, is_train=is_train, white_bg=white_bg, ndc_ray=ndc_ray, mip=mip, N_samples=N_samples):
-        
-            rgb_map, all_rgb, depth_map, weight = res
-            rgbs.append(rgb_map[None, ...])
-            all_rgbs.append(all_rgb[None, ...])
-            depth_maps.append(depth_map[None, ...])
-            weights.append(weight[None, ...])
-        
-
-        rgbss.append(torch.cat(rgbs))
-        all_rgbss.append(torch.cat(all_rgbs))
-        depth_mapss.append(torch.cat(depth_maps))
-        weightss.append(torch.cat(weights))
-
-    return torch.cat(rgbss, 1), torch.cat(all_rgbss, 1), torch.cat(depth_mapss, 1), torch.cat(weightss, 1), None"""
-
 def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096, N_samples=-1, ndc_ray=False, mip=False, white_bg=True, is_train=False, device='cuda'):
 
     corse_rgbs, rgbs, all_rgbs, depth_maps, weights, uncertainties = [], [], [], [], [], []
@@ -79,9 +54,6 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, mip=False, chunk=4096, N_sa
 
         rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, mip=mip, white_bg = white_bg, device=device)        
-
-        """rgb_map = rgb_map[-1].squeeze()
-        depth_map = depth_map[-1].squeeze()"""
         
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
@@ -131,9 +103,6 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         rgb_map, _, disp_map, _, _ = renderer(rays, tensorf, step=-1, mip=mip, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
 
-        """rgb_map = rgb_map[-1].squeeze()
-        disp_map = disp_map[-1].squeeze()"""
-
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
         rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
@@ -157,9 +126,6 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
 
         rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=chunk, N_samples=N_samples,
                                         ndc_ray=ndc_ray, white_bg = white_bg, device=device)
-
-        """rgb_map = rgb_map[-1].squeeze()
-        disp_map = disp_map[-1].squeeze()"""
 
         rgb_map = rgb_map.clamp(0.0, 1.0)
 

@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name  = blender
-datadir       = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/lego
-expname       = lego
+datadir       = /content/drive/MyDrive/AI_dataset/nerf_synthetic/chair
+expname       = 30k_chair
 basedir       = ./log
 
 
@@ -15,7 +15,7 @@ N_test_imgs   = 10
 
 
 #------ Config parameters ------
-n_iters = 15000
+n_iters = 30000
 batch_size = 1024
 step_ratio = 1
 
@@ -30,7 +30,7 @@ downsample_train        = 2
 
 #------ Model name ------
 model_name    = TensorVMSplit
-shadingMode   = MLP_Fea
+shadingMode   = MLP
 fea2denseAct  = softplus
 overwrt       = True 
 
@@ -53,15 +53,8 @@ fea_pe  = 2
 data_dim_color = 27
 
 
-#------ Mip nerf ------
-mip_nerf    = False
-randomized  = True
-ray_shape   = 'cone'
-num_levels  = 2
-
-
 #------ Frequence reg ------
-free_reg        = False
+free_reg        = True
 freq_reg_ratio  = 0.8
 
 

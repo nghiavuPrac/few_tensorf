@@ -9,7 +9,7 @@ from torch.utils.tensorboard import SummaryWriter
 import datetime
 from dataLoader import dataset_dict
 import sys
- 
+import json 
 from opt import config_parser
 from pathlib import Path
 import torch
@@ -95,7 +95,12 @@ def export_mesh(args, ckpt_path):
 def render_test(args):
     # init dataset
     dataset = dataset_dict[args.dataset_name]
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True)
+
+    if len(args.test_idxs) == 0:
+        test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=True, N_imgs=args.N_test_imgs)
+    else:
+        test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=True, indexs=args.test_idxs)
+
     white_bg = test_dataset.white_bg
     ndc_ray = args.ndc_ray
 
@@ -110,21 +115,26 @@ def render_test(args):
     tensorf.load(ckpt)
 
     logfolder = os.path.dirname(args.ckpt)
+
     if args.render_train:
         os.makedirs(f'{logfolder}/imgs_train_all', exist_ok=True)
-        train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True)
+        if len(args.train_idxs) == 0:
+            train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=True, N_imgs=args.N_train_imgs)
+        else:
+            train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=True, indexs=args.train_idxs)
+        
         PSNRs_test = evaluation(train_dataset,tensorf, args, renderer, f'{logfolder}/imgs_train_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
         print(f'======> {args.expname} train all psnr: {np.mean(PSNRs_test)} <========================')
 
     if args.render_test:
-        os.makedirs(f'{logfolder}/{args.expname}/imgs_test_all', exist_ok=True)
-        evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/{args.expname}/imgs_test_all/',
+        os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
+        PSNRs_test = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/{args.expname}/imgs_test_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
-
+        print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
     if args.render_path:
         c2ws = test_dataset.render_path
-        os.makedirs(f'{logfolder}/{args.expname}/imgs_path_all', exist_ok=True)
+        os.makedirs(f'{logfolder}/imgs_path_all', exist_ok=True)
         evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/{args.expname}/imgs_path_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
@@ -151,8 +161,8 @@ def reconstruction(args):
         
 
     # Observation
-    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[8])
-    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[5])
+    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[26])
+    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[92])
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -260,27 +270,6 @@ def reconstruction(args):
         
         loss = torch.mean((rgb_map - rgb_train)**2)
 
-        """all_rgbs = all_rgbs[-1].squeeze()
-        depth_map = depth_map[-1].squeeze()
-        weights = weights[-1].squeeze()"""
-
-        """losses = []
-        for rgb in rgb_map:
-            losses.append(torch.mean((rgb - rgb_train)**2))
-
-        # coarse_loss_mult
-        loss = 0.1 * torch.sum(torch.Tensor(losses[:-1])) + losses[-1]"""
-
-        """color_fine_loss = F.l1_loss(color_error, torch.zeros_like(color_error), reduction='sum') / mask_sum
-        psnr = 20.0 * torch.log10(1.0 / (((color_fine - true_rgb)**2 * mask).sum() / (mask_sum * 3.0)).sqrt())
-        eikonal_loss = gradient_error
-        mask_loss = F.binary_cross_entropy(weight_sum.clip(1e-3, 1.0 - 1e-3), mask)
-
-        loss = color_fine_loss +\
-                   eikonal_loss * self.igr_weight +\
-                   mask_loss * self.mask_weight"""
-
-
         # loss
         total_loss = loss
         if args.occ_reg_loss_mult > 0:
@@ -338,13 +327,6 @@ def reconstruction(args):
             )
             PSNRs_train.append(float(np.mean(PSNRs)))
             PSNRs = []
-            
-
-
-        """if iteration % args.vis_every == args.vis_every - 1 and args.N_vis!=0:
-            PSNRs_test = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/imgs_vis/', N_vis=args.N_vis,
-                                    prtx=f'{iteration:06d}_', N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray, compute_extra_metrics=False)
-            summary_writer.add_scalar('test/psnr', np.mean(PSNRs_test), global_step=iteration)"""
         
         if iteration % args.train_vis_every == 0:
             
@@ -365,9 +347,6 @@ def reconstruction(args):
             history['test_psnr'].append(round(float(np.mean(PSNRs_test)), 2))
             history['mse'].append(round(loss, 5))
             # history['pc_valib_rgb'].append(round(number_valib_rgb[0]/number_valib_rgb[1], 2))        
-
-            """for param_group in tensorf.get_optparam_groups():
-                history[param_group['name']].append(float(round(param_group['lr'] * lr_factor, 5)))"""
 
             save_rendered_image_per_train(
               train_dataset       = train_visual,
@@ -407,24 +386,6 @@ def reconstruction(args):
                 allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
                 trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)
 
-        """if iteration in update_AlphaMask_list:
-
-            if reso_cur[0] * reso_cur[1] * reso_cur[2]<=256**3:# update volume resolution
-                reso_mask = reso_cur
-            aabb = tensorf.updateAlphaMask(tuple(reso_mask))
-            if iteration == update_AlphaMask_list[0]:
-                tensorf.shrink(aabb)
-                # tensorVM.alphaMask = None
-                L1_reg_weight = args.L1_weight_rest
-                print("continuing L1_reg_weight", L1_reg_weight)
-
-
-            if not args.ndc_ray and iteration == update_AlphaMask_list[1]:
-                # filter rays outside the bbox
-                allrays,allrgbs = tensorf.filtering_rays(allrays,allrgbs)
-                trainingSampler = SimpleSampler(allrgbs.shape[0], args.batch_size)"""
-
-
         if iteration in upsamp_list:
             n_voxels = N_voxel_list.pop(0)
             reso_cur = N_to_reso(n_voxels, tensorf.aabb)
@@ -452,7 +413,7 @@ def reconstruction(args):
 
     if args.render_test:
         os.makedirs(f'{logfolder}/imgs_test_all', exist_ok=True)
-        PSNRs_test = evaluation(test_dataset,tensorf, args, renderer, f'{logfolder}/imgs_test_all/',
+        PSNRs_test = evaluation(final_test_dataset,tensorf, args, renderer, f'{logfolder}/imgs_test_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
         summary_writer.add_scalar('test/psnr_all', np.mean(PSNRs_test), global_step=iteration)
         print(f'======> {args.expname} test all psnr: {np.mean(PSNRs_test)} <========================')
@@ -465,7 +426,8 @@ def reconstruction(args):
         evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/imgs_path_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
     
-    
+    np.savez(f"{logfolder}/history.npz", *history)
+
     create_gif(f"{logfolder}/gif/plot/vis_every", f"{logfolder}/gif/training.gif")
 
     return f'{logfolder}/{args.expname}.th'
@@ -483,7 +445,6 @@ if __name__ == '__main__':
         export_mesh(args, args.ckpt)
 
     if args.render_only and (args.render_test or args.render_path or args.render_train):
-        exit()
         render_test(args)
     elif args.config:
         ckpt_path = reconstruction(args)        
