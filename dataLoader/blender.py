@@ -75,6 +75,7 @@ class BlenderDataset(Dataset):
         elif self.N_imgs > 0 and self.N_imgs < len(idxs):
             idxs = np.random.choice(idxs, self.N_imgs, replace=False)
 
+        bars = tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})')
 
         if self.tqdm:
             for i in tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})'):#img_list:#
@@ -90,34 +91,26 @@ class BlenderDataset(Dataset):
                 """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
                 image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
                 self.image_paths += [image_path]"""
+                
+                self.image_paths += [image_path]
                 img = Image.open(image_path)
 
-                if self.enhance != None:
-                  for k, v in self.enhance.items():
-                      if k == 'shape':
-                          enhancer = ImageEnhance.Sharpness(img)
-                          img = enhancer.enhance(v) 
-                      elif k == 'contract': 
-                          enhancer = ImageEnhance.Contrast(img)
-                          img = enhancer.enhance(v) 
-                      elif k == 'bright':
-                          enhancer = ImageEnhance.Brightness(img)
-                          img = enhancer.enhance(v)
-                      elif k == 'satur':
-                          enhancer = ImageEnhance.Color(img)
-                          img = enhancer.enhance(v)
-
-                
                 if self.downsample!=1.0:
                     img = img.resize(self.img_wh, Image.LANCZOS)
-                img = self.transform(img)  # (4, h, w)
-                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA
-                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
-                self.all_rgbs += [img]
 
+                _, _, _, mask = img.split()
+                mask = self.transform(mask)
+                img = self.transform(img)  # (4, h, w)
+                
+                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA                
+                mask = mask.view(1, -1).permute(1, 0)  # (h*w, 4) RGBA
+                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
+                
+                self.all_rgbs += [img]
 
                 rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
                 self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
+                self.all_masks += [mask]
         else:
             for i in idxs:
                 frame = self.meta['frames'][i]
@@ -133,29 +126,35 @@ class BlenderDataset(Dataset):
                 
                 self.image_paths += [image_path]
                 img = Image.open(image_path)
-                
                 if self.downsample!=1.0:
                     img = img.resize(self.img_wh, Image.LANCZOS)
+                
+                _, _, _, mask = img.split()
+                mask = self.transform(mask)
                 img = self.transform(img)  # (4, h, w)
-                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA
+                
+                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA                
+                mask = mask.view(1, -1).permute(1, 0)  # (h*w, 4) RGBA
                 img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
+                
                 self.all_rgbs += [img]
-
 
                 rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
                 self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
+                self.all_masks += [mask]
 
 
         self.poses = torch.stack(self.poses)
         if not self.is_stack:
             self.all_rays = torch.cat(self.all_rays, 0)  # (len(self.meta['frames])*h*w, 3)
             self.all_rgbs = torch.cat(self.all_rgbs, 0)  # (len(self.meta['frames])*h*w, 3)
+            self.all_masks = torch.stack(self.all_masks, 0).reshape(-1,*self.img_wh[::-1])  # (len(self.meta['frames]),h,w,3)
             # self.all_depth = torch.cat(self.all_depth, 0)  # (len(self.meta['frames])*h*w, 3)
 
         else:
             self.all_rays = torch.stack(self.all_rays, 0)  # (len(self.meta['frames]),h*w, 3)
             self.all_rgbs = torch.stack(self.all_rgbs, 0).reshape(-1,*self.img_wh[::-1], 3)  # (len(self.meta['frames]),h,w,3)
-            # self.all_masks = torch.stack(self.all_masks, 0).reshape(-1,*self.img_wh[::-1])  # (len(self.meta['frames]),h,w,3)
+            self.all_masks = torch.stack(self.all_masks, 0).reshape(-1,*self.img_wh[::-1])  # (len(self.meta['frames]),h,w,3)
 
 
     def define_transforms(self):

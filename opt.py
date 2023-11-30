@@ -20,6 +20,9 @@ def config_parser(cmd=None):
                         help='Number of train images')
     parser.add_argument("--N_test_imgs", type=int, default=0,
                         help='Number of test images')                                                                                                
+    parser.add_argument("--train_idxs", default=[], type=int, action="append")                        
+    parser.add_argument("--test_idxs", default=[], type=int, action="append")                        
+    parser.add_argument("--val_idxs", default=[], type=int, action="append")                        
 
     parser.add_argument('--with_depth', action='store_true')
     parser.add_argument('--downsample_train', type=float, default=1.0)
@@ -119,11 +122,11 @@ def config_parser(cmd=None):
 
     parser.add_argument("--ckpt", type=str, default=None,
                         help='specific weights npy file to reload for coarse network')
-    parser.add_argument("--render_only", default=False, action="store_true")
-    parser.add_argument("--render_test", default=False, action="store_true")
-    parser.add_argument("--render_train", default=False, action="store_true")
-    parser.add_argument("--render_path", default=False, action="store_true")
-    parser.add_argument("--export_mesh", default=False, action="store_true")
+    parser.add_argument("--render_only", type=int, default=0)
+    parser.add_argument("--render_test", type=int, default=0)
+    parser.add_argument("--render_train", type=int, default=0)
+    parser.add_argument("--render_path", type=int, default=0)
+    parser.add_argument("--export_mesh", type=int, default=0)
 
     # rendering options
     parser.add_argument('--lindisp', default=False, action="store_true",

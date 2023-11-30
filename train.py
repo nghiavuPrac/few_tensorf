@@ -1,6 +1,7 @@
 import os
 from tqdm.auto import tqdm
 
+import torch.nn.functional as F
 import json, random
 from renderer import *
 from utils import *
@@ -105,7 +106,7 @@ def render_test(args):
     ckpt = torch.load(args.ckpt, map_location=device)
     kwargs = ckpt['kwargs']
     kwargs.update({'device': device})
-    tensorf = eval(args.model_name)(**kwargs)
+    tensorf = eval(args.model_name)(args, **kwargs)
     tensorf.load(ckpt)
 
     logfolder = os.path.dirname(args.ckpt)
@@ -127,127 +128,31 @@ def render_test(args):
         evaluation_path(test_dataset,tensorf, c2ws, renderer, f'{logfolder}/{args.expname}/imgs_path_all/',
                                 N_vis=-1, N_samples=-1, white_bg = white_bg, ndc_ray=ndc_ray,device=device)
 
-def setup_dataset(args, device):
-    render_n_samples = 1024
-
-    # setup the scene bounding box.
-    if args.unbounded:
-        print("Using unbounded rendering")
-        contraction_type = ContractionType.UN_BOUNDED_SPHERE
-        # contraction_type = ContractionType.UN_BOUNDED_TANH
-        scene_aabb = None
-        near_plane = 0.2
-        far_plane = 1e4
-        render_step_size = 1e-2
-    else:
-        contraction_type = ContractionType.AABB
-        scene_aabb = torch.tensor(args.aabb, dtype=torch.float32, device=device)
-        near_plane = None
-        far_plane = None
-        render_step_size = (
-            (scene_aabb[3:] - scene_aabb[:3]).max()
-            * math.sqrt(3)
-            / render_n_samples
-        ).item()
-
-    # setup the dataset
-    train_dataset_kwargs = {}
-    test_dataset_kwargs = {}
-    morphing_dataset_kwargs = {"morph_mode": args.vm_morph_mode}
-    scene_type = scenes_list[args.scene]
-    if scene_type == "mipnerf360":
-        from datasets.nerf_360_v2 import SubjectLoader
-
-        data_root_fp = args.data
-        target_sample_batch_size = 1 << 16
-        # target_sample_batch_size = 1 << 14
-        train_dataset_kwargs = {"color_bkgd_aug": "random", "factor": 4}
-        test_dataset_kwargs = {"factor": 4}
-        grid_resolution = 128
-    elif scene_type == "nerf_synthetic":
-        from datasets.nerf_synthetic import SubjectLoader
-
-        data_root_fp = args.data
-        target_sample_batch_size = 1 << 16
-        # target_sample_batch_size = 1 << 14
-        grid_resolution = 128
-    elif scene_type == "dtu":
-        from datasets.dtu import SubjectLoader
-
-        data_root_fp = args.data
-        target_sample_batch_size = 1 << 16
-        grid_resolution = 128
-
-        train_dataset_kwargs = {"color_bkgd_aug": "random", "factor": 4,"n_input_views":3}
-        test_dataset_kwargs = {"factor": 4}
-
-        pass
-
-    if args.vm:
-        train_dataset_kwargs['batch_over_images'] = False
-
-    train_dataset = SubjectLoader(
-        subject_id=args.scene,
-        root_fp=data_root_fp,
-        split=args.train_split,
-        num_rays=target_sample_batch_size // render_n_samples,
-        **train_dataset_kwargs,
-    )
-
-    if args.vm:
-        from datasets.morphing_dataset import MorphingPeriodicGeneratorDataset
-        from datasets.cameras_combination import CamerasCombination
-
-        cameras_combination_dataset = CamerasCombination(
-            train_dataset,
-            args.vm_max_distance,
-        )
-        gt_dataset = train_dataset
-        train_dataset = MorphingPeriodicGeneratorDataset(
-            gt_dataset,
-            cameras_combination_dataset,
-            num_rays=target_sample_batch_size // render_n_samples,
-            **morphing_dataset_kwargs,
-        )
-    
-    # train_dataset.images = train_dataset.images.to(device)
-    # train_dataset.camtoworlds = train_dataset.camtoworlds.to(device)
-    # train_dataset.K = train_dataset.K.to(device)
-
-    test_dataset = SubjectLoader(
-        subject_id=args.scene,
-        root_fp=data_root_fp,
-        split="test",
-        num_rays=None,
-        **test_dataset_kwargs,
-    )
-    # test_dataset.images = test_dataset.images.to(device)
-    # test_dataset.camtoworlds = test_dataset.camtoworlds.to(device)
-    # test_dataset.K = test_dataset.K.to(device)
-    if args.overfit == True:
-        test_dataset = train_dataset
-
-    # learn output dir
-    experiment_dir = os.path.join(args.output_dir, scene_type, f"{args.scene}_{args.vm_morph_mode}")
-    os.makedirs(experiment_dir, exist_ok=True)
-
-    return (target_sample_batch_size, contraction_type, scene_aabb, near_plane, far_plane, render_step_size, grid_resolution, train_dataset, test_dataset, experiment_dir)
-
 def reconstruction(args):
 
     # init dataset
     dataset = dataset_dict[args.dataset_name]
 
     # Load data
-    idxs = [26, 86, 2, 55, 75, 16, 73, 93]
-    train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, indexs=idxs)
-    test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
-    idxs = [92, 146, 53, 75, 54, 117, 120, 121, 34, 176, 107, 126, 36, 157, 67, 14, 15, 18, 97, 140, 10, 167, 44, 77, 186]
-    final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, indexs=idxs)
+    if len(args.train_idxs) == 0:
+        train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, N_imgs=args.N_train_imgs)
+    else:
+        train_dataset = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=False, indexs=args.train_idxs)
+
+    if len(args.val_idxs) == 0:
+        test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
+    else:
+        test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, indexs=args.val_idxs)
+
+    if len(args.test_idxs) == 0:
+        final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, N_imgs=args.N_test_imgs)
+    else:
+        final_test_dataset = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, indexs=args.test_idxs)
+        
 
     # Observation
-    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[26])
-    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[92])
+    train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[8])
+    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[5])
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -353,18 +258,27 @@ def reconstruction(args):
         rgb_map, all_rgbs, depth_map, weights, uncertainty = renderer(rays_train, tensorf, step, args.n_iters, chunk=args.batch_size,
                                 N_samples=nSamples, white_bg = white_bg, ndc_ray=ndc_ray, mip=args.mip_nerf, device=device, is_train=True)
         
-        all_rgbs = all_rgbs[-1].squeeze()
-        depth_map = depth_map[-1].squeeze()
-        weights = weights[-1].squeeze()
+        loss = torch.mean((rgb_map - rgb_train)**2)
 
-        losses = []
+        """all_rgbs = all_rgbs[-1].squeeze()
+        depth_map = depth_map[-1].squeeze()
+        weights = weights[-1].squeeze()"""
+
+        """losses = []
         for rgb in rgb_map:
             losses.append(torch.mean((rgb - rgb_train)**2))
 
         # coarse_loss_mult
-        loss = 0.1 * torch.sum(torch.Tensor(losses[:-1])) + losses[-1]
+        loss = 0.1 * torch.sum(torch.Tensor(losses[:-1])) + losses[-1]"""
 
-        # loss = torch.mean((rgb_map - rgb_train) ** 2)
+        """color_fine_loss = F.l1_loss(color_error, torch.zeros_like(color_error), reduction='sum') / mask_sum
+        psnr = 20.0 * torch.log10(1.0 / (((color_fine - true_rgb)**2 * mask).sum() / (mask_sum * 3.0)).sqrt())
+        eikonal_loss = gradient_error
+        mask_loss = F.binary_cross_entropy(weight_sum.clip(1e-3, 1.0 - 1e-3), mask)
+
+        loss = color_fine_loss +\
+                   eikonal_loss * self.igr_weight +\
+                   mask_loss * self.mask_weight"""
 
 
         # loss
@@ -565,15 +479,15 @@ if __name__ == '__main__':
 
     args = config_parser()
 
-    if  args.export_mesh and args.config:
+    if args.export_mesh:
+        export_mesh(args, args.ckpt)
+
+    if args.render_only and (args.render_test or args.render_path or args.render_train):
+        render_test(args)
+    elif args.config:
+        print(True)
         ckpt_path = reconstruction(args)        
         export_mesh(args, ckpt_path)  
 
         import shutil 
-        shutil.copy(args.config, ckpt_path[:-3]+'.txt') 
-
-    elif args.export_mesh:
-        export_mesh(args)        
-
-    if args.render_only and (args.render_test or args.render_path):
-        print(render_test(args))
+        shutil.copy(args.config, ckpt_path[:-3]+'.txt')         
