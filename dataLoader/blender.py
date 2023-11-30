@@ -75,74 +75,44 @@ class BlenderDataset(Dataset):
         elif self.N_imgs > 0 and self.N_imgs < len(idxs):
             idxs = np.random.choice(idxs, self.N_imgs, replace=False)
 
-        bars = tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})')
-
         if self.tqdm:
-            for i in tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})'):#img_list:#
-
-                frame = self.meta['frames'][i]
-                pose = np.array(frame['transform_matrix']) @ self.blender2opencv
-                c2w = torch.FloatTensor(pose)
-                self.poses += [c2w]
-
-                file_path = frame['file_path'].split('.')[-1]
-                image_path = self.root_dir + file_path + '.png'
-
-                """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
-                image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
-                self.image_paths += [image_path]"""
-                
-                self.image_paths += [image_path]
-                img = Image.open(image_path)
-
-                if self.downsample!=1.0:
-                    img = img.resize(self.img_wh, Image.LANCZOS)
-
-                _, _, _, mask = img.split()
-                mask = self.transform(mask)
-                img = self.transform(img)  # (4, h, w)
-                
-                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA                
-                mask = mask.view(1, -1).permute(1, 0)  # (h*w, 4) RGBA
-                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
-                
-                self.all_rgbs += [img]
-
-                rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
-                self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
-                self.all_masks += [mask]
+            bars = tqdm(idxs, desc=f'Loading data {self.split} ({len(idxs)})')
         else:
-            for i in idxs:
-                frame = self.meta['frames'][i]
-                pose = np.array(frame['transform_matrix']) @ self.blender2opencv
-                c2w = torch.FloatTensor(pose)
-                self.poses += [c2w]
+            bars = idxs  
+                  
+        for i in bars:#img_list:#
 
-                file_path = frame['file_path'].split('.')[-1]
-                image_path = self.root_dir + file_path + '.png'
+            frame = self.meta['frames'][i]
+            pose = np.array(frame['transform_matrix']) @ self.blender2opencv
+            c2w = torch.FloatTensor(pose)
+            self.poses += [c2w]
 
-                """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
-                image_path = os.path.join(self.root_dir, self.split, file_path+'.png')"""
-                
-                self.image_paths += [image_path]
-                img = Image.open(image_path)
-                if self.downsample!=1.0:
-                    img = img.resize(self.img_wh, Image.LANCZOS)
-                
-                _, _, _, mask = img.split()
-                mask = self.transform(mask)
-                img = self.transform(img)  # (4, h, w)
-                
-                img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA                
-                mask = mask.view(1, -1).permute(1, 0)  # (h*w, 4) RGBA
-                img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
-                
-                self.all_rgbs += [img]
+            file_path = frame['file_path'].split('.')[-1]
+            image_path = self.root_dir + file_path + '.png'
 
-                rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
-                self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
-                self.all_masks += [mask]
+            """file_path = frame['file_path'].split('\\')[-1].split('.')[-2]
+            image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
+            self.image_paths += [image_path]"""
+            
+            self.image_paths += [image_path]
+            img = Image.open(image_path)
 
+            if self.downsample!=1.0:
+                img = img.resize(self.img_wh, Image.LANCZOS)
+
+            _, _, _, mask = img.split()
+            mask = self.transform(mask)
+            img = self.transform(img)  # (4, h, w)
+            
+            img = img.view(4, -1).permute(1, 0)  # (h*w, 4) RGBA                
+            mask = mask.view(1, -1).permute(1, 0)  # (h*w, 4) RGBA
+            img = img[:, :3] * img[:, -1:] + (1 - img[:, -1:])  # blend A to RGB
+            
+            self.all_rgbs += [img]
+
+            rays_o, rays_d = get_rays(self.directions, c2w)  # both (h*w, 3)
+            self.all_rays += [torch.cat([rays_o, rays_d], 1)]  # (h*w, 6)
+            self.all_masks += [mask]
 
         self.poses = torch.stack(self.poses)
         if not self.is_stack:

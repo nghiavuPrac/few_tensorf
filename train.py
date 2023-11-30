@@ -483,9 +483,9 @@ if __name__ == '__main__':
         export_mesh(args, args.ckpt)
 
     if args.render_only and (args.render_test or args.render_path or args.render_train):
+        exit()
         render_test(args)
     elif args.config:
-        print(True)
         ckpt_path = reconstruction(args)        
         export_mesh(args, ckpt_path)  
 
