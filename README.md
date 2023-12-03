@@ -84,12 +84,6 @@ We provide two options for training on your own image set:
     
 
 ## Citation
-If you find our code or paper helps, please consider citing:
-```
-@INPROCEEDINGS{Chen2022ECCV,
-  author = {Anpei Chen and Zexiang Xu and Andreas Geiger and Jingyi Yu and Hao Su},
-  title = {TensoRF: Tensorial Radiance Fields},
-  booktitle = {European Conference on Computer Vision (ECCV)},
-  year = {2022}
-}
-```
+Source code reference from: 
+[TensoRF](https://github.com/apchenstu/TensoRF)
+[FreeNeRF](https://github.com/Jiawei-Yang/FreeNeRF/tree/main)
