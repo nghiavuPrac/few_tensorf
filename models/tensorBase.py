@@ -682,7 +682,7 @@ class TensorBase(torch.nn.Module):
         if app_mask.any():
             app_features = self.compute_appfeature(xyz_sampled[app_mask], step, total_step)
 
-            valid_rgbs = self.renderModule(xyz_sampled[app_mask], exp_viewdirs[app_mask], app_features, step, total_step)
+            valid_rgbs = self.renderModule(xyz_sampled[app_mask], exp_viewdirs[app_mask], app_features, -1, total_step)
             rgb[app_mask] = valid_rgbs
 
         acc_map = torch.sum(weight, -1)

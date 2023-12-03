@@ -2,7 +2,7 @@ from .llff import LLFFDataset
 from .blender import BlenderDataset
 from .nsvf import NSVF
 from .tankstemple import TanksTempleDataset
-from .your_own_data import YourOwnDataset
+from .human import HumanDataset
 
 
 
