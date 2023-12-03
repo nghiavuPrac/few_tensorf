@@ -165,7 +165,8 @@ def config_parser(cmd=None):
     parser.add_argument("--vis_every", type=int, default=1000,
                         help='frequency of visualize the image')  
     parser.add_argument("--train_vis_every", type=int, default=1000,
-                        help='visualize the training image every')    
+                        help='visualize the training image every')  
+    parser.add_argument("--save_ckpt_every", type=int, action="append")                        
     parser.add_argument("--overwrt", action="store_true",
                         help='overwrite checkpoint')                                                    
     if cmd is not None:

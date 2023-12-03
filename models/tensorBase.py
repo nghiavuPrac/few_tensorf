@@ -225,14 +225,6 @@ class MLPRender(torch.nn.Module):
         indata = [features, viewdirs]
 
         if self.pospe > 0:
-          
-            """if len(pts) == 2:
-                mean = pts[0]
-                var = pts[1]
-                encode, _ = self.pos_encoder(mean, var)
-            else:
-                pts = pts[0]
-                encode = self.pos_encoder(pts)"""
             encode = self.pos_encoder(pts)
 
             if step == -1:    
@@ -242,7 +234,6 @@ class MLPRender(torch.nn.Module):
                 indata += [encode*mask]
 
         if self.viewpe > 0:
-
             encode = positional_encoding(viewdirs, self.viewpe)
             if step == -1:    
                 indata += [encode]
@@ -251,7 +242,6 @@ class MLPRender(torch.nn.Module):
                 indata += [encode*mask]
 
         if self.feape > 0:
-
             encode = positional_encoding(features, self.feape)
             if step == -1:    
                 indata += [encode]
@@ -265,31 +255,117 @@ class MLPRender(torch.nn.Module):
 
         return rgb
 
+"""class NeRF(nn.Module):
+    def __init__(self,
+                 D,
+                 W,
+                 d_in,
+                 d_in_view,
+                 pospe,
+                 viewpe,
+                 feape,
+                 inChanel,
+                 multires=0,
+                 multires_view=0,
+                 output_ch=4,
+                 skips=[4],
+                 use_viewdirs=False):
+        super(NeRF, self).__init__()
+        self.D = D
+        self.W = W
+        self.d_in = d_in
+        self.d_in_view = d_in_view
+        self.input_ch = 3
+        self.input_ch_view = 3
+        self.embed_fn = None
+        self.embed_fn_view = None
 
-"""class MLPRender(torch.nn.Module):
-    def __init__(self,inChanel, viewpe=6, featureC=128, encoder=None):
-        super(MLPRender, self).__init__()
-
-        self.in_mlpC = (3+2*viewpe*3) + inChanel
+        self.in_mlpC = (2*pospe*3) + (3+2*viewpe*3) + (2*feape*inChanel) + inChanel #
+        self.pospe = pospe
         self.viewpe = viewpe
-        self.encoder  = encoder
-        layer1 = torch.nn.Linear(self.in_mlpC, featureC)
-        layer2 = torch.nn.Linear(featureC, featureC)
-        layer3 = torch.nn.Linear(featureC,3)
+        self.feape = feape
+        
+        self.encoder = encoder
+      
+        if pospe > 0:
+            self.pos_encoder = self.encoder(0, pospe)
 
-        self.mlp = torch.nn.Sequential(layer1, torch.nn.ReLU(inplace=True), layer2, torch.nn.ReLU(inplace=True), layer3)
-        torch.nn.init.constant_(self.mlp[-1].bias, 0)
+        if viewpe > 0:
+            self.view_encoder = self.encoder(0, viewpe)
 
-    def forward(self, pts, viewdirs, features):
+        if feape > 0:
+            self.fea_encoder = self.encoder(0, feape)
+
+        self.skips = skips
+        self.use_viewdirs = use_viewdirs
+
+        self.pts_linears = nn.ModuleList(
+            [nn.Linear(self.in_mlpC, W)] +
+            [nn.Linear(W, W) if i not in self.skips else nn.Linear(W + self.input_ch, W) for i in range(D - 1)])
+
+        ### Implementation according to the official code release
+        ### (https://github.com/bmild/nerf/blob/master/run_nerf_helpers.py#L104-L105)
+        self.views_linears = nn.ModuleList([nn.Linear(self.input_ch_view + W, W // 2)])
+
+        ### Implementation according to the paper
+        # self.views_linears = nn.ModuleList(
+        #     [nn.Linear(input_ch_views + W, W//2)] + [nn.Linear(W//2, W//2) for i in range(D//2)])
+
+        if use_viewdirs:
+            self.feature_linear = nn.Linear(W, W)
+            # self.alpha_linear = nn.Linear(W, 1)
+            self.rgb_linear = nn.Linear(W // 2, 3)
+        else:
+            self.output_linear = nn.Linear(W, output_ch)
+
+    def forward(self, input_pts, input_views):
+
         indata = [features, viewdirs]
-        if self.viewpe > 0:
-            indata += [positional_encoding(viewdirs, self.viewpe)]
-        mlp_in = torch.cat(indata, dim=-1)
-        rgb = self.mlp(mlp_in)
-        rgb = torch.sigmoid(rgb)
 
-        return rgb
-"""
+        if self.pospe > 0:
+            encode = self.pos_encoder(pts)
+            if step == -1:    
+                indata += [encode]
+            else:
+                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
+                indata += [encode*mask]
+        if self.viewpe > 0:
+            encode = positional_encoding(viewdirs, self.viewpe)
+            if step == -1:    
+                indata += [encode]
+            else:
+                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
+                indata += [encode*mask]
+        if self.feape > 0:
+            encode = positional_encoding(features, self.feape)
+            if step == -1:    
+                indata += [encode]
+            else:
+                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
+                indata += [encode*mask]
+        mlp_in = torch.cat(indata, dim=-1)
+
+
+        h = input_pts
+        for i, l in enumerate(self.pts_linears):
+            h = self.pts_linears[i](h)
+            h = F.relu(h)
+            if i in self.skips:
+                h = torch.cat([input_pts, h], -1)
+
+        if self.use_viewdirs:
+            alpha = self.alpha_linear(h)
+            feature = self.feature_linear(h)
+            h = torch.cat([feature, input_views], -1)
+
+            for i, l in enumerate(self.views_linears):
+                h = self.views_linears[i](h)
+                h = F.relu(h)
+
+            rgb = self.rgb_linear(h)
+            return alpha, rgb
+        else:
+            assert False"""
 
 class TensorBase(torch.nn.Module):
     def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 27,
@@ -467,9 +543,7 @@ class TensorBase(torch.nn.Module):
             torch.linspace(0, 1, gridSize[2]),
         ), -1).to(self.device)
         dense_xyz = self.aabb[0] * (1-samples) + self.aabb[1] * samples
-
-        # dense_xyz = dense_xyz
-        # print(self.stepSize, self.distance_scale*self.aabbDiag)
+                
         alpha = torch.zeros_like(dense_xyz[...,0])
         for i in range(gridSize[0]):
             alpha[i] = self.compute_alpha(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
@@ -595,7 +669,7 @@ class TensorBase(torch.nn.Module):
 
         if ray_valid.any():
             xyz_sampled = self.normalize_coord(xyz_sampled)
-            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], step, total_step)
+            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], -1, total_step)
 
             validsigma = self.feature2density(sigma_feature)
             sigma[ray_valid] = validsigma

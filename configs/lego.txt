@@ -1,21 +1,25 @@
 #------ Folder ------ 
-dataset_name  = blender
-datadir       = /content/drive/MyDrive/AI_dataset/nerf_synthetic/chair
-expname       = 30k_chair
-basedir       = ./log
-
+dataset_name = blender
+datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0300_800_800_50_3S_raw
+expname = free_0300
+basedir = ./log
 
 #------ Number images ------
-train_idxs    = [26, 86, 2, 55, 75, 16, 73, 93]
-val_idxs      = [100,101,102,103,104,105,106,107,108,109,110,111,112]
-# test_idxs     = [92, 146, 53, 75, 54, 117, 120, 121, 34, 176, 107, 126, 36, 157, 67, 14, 15, 18, 97, 140, 10, 167, 44, 77, 186]
-test_idxs     = [113,114,115,116,117,118,119,120,121,122,123,124,125,126,127,128,129,130,131,132,133,134,135,136,137]
-N_train_imgs  = 8
-N_test_imgs   = 10
+# train_idxs    = [26, 86, 2, 55, 75, 16, 73, 93]
+# val_idxs      = [0,8,16,24,32,40,48,56,64,72,80,88,96]
+# test_idxs     = [0, 146, 53, 75, 54, 117, 120, 121, 34, 176, 107, 126, 36, 157, 67, 14, 15, 18, 97, 140, 10, 167, 44, 77, 186]
+# test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
+
+# train_idxs    = [0,6,12,18,24,30,36,42]
+# val_idxs      = [0,2,4,6,8,10,12,14,16,18,20]
+# test_idxs     = [0,8,16,24,32,40,48,56,64,72,80,88,96,104,112,120,128,136,144,152,160,168,176,184,192]
+
+N_train_imgs  = 0
+N_test_imgs   = 0
 
 
 #------ Config parameters ------
-n_iters = 30000
+n_iters = 15000
 batch_size = 1024
 step_ratio = 1
 
@@ -39,27 +43,28 @@ overwrt       = True
 N_vis             = 5
 vis_every         = 2000
 train_vis_every   = 2000
+save_ckpt_every   = [15000, 30000, 50000]
 
 
 #------ Decomposition ------
-n_lamb_sigma = [16, 16, 16]
-n_lamb_sh = [48, 48, 48]
+n_lamb_sigma = [16,16,16]
+n_lamb_sh = [48,48,48]
 
 
 #------ Feature config ------
-pos_pe  = 6
-view_pe = 6
-fea_pe  = 2
+pos_pe  = 2
+view_pe = 2
+fea_pe = 2
 data_dim_color = 27
 
 
 #------ Frequence reg ------
-free_reg        = True
+free_reg        = True 
 freq_reg_ratio  = 0.8
 
 
 #------ Occlusion reg ------
-occ_reg_loss_mult   = 0.0
+occ_reg_loss_mult   = 0.1
 occ_reg_range       = 20
 occ_wb_range        = 20
 occ_wb_prior        = False

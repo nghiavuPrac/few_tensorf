@@ -19,7 +19,6 @@ from dataLoader import ray_utils
 import timeit
 
 
-
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 renderer = OctreeRender_trilinear_fast
@@ -162,7 +161,7 @@ def reconstruction(args):
 
     # Observation
     train_visual = dataset(args.datadir, split='train', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[26])
-    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[92])
+    test_visual = dataset(args.datadir, split='test', downsample=args.downsample_train, is_stack=True, tqdm=False, indexs=[26])
 
     white_bg = train_dataset.white_bg
     near_far = train_dataset.near_far
@@ -400,8 +399,10 @@ def reconstruction(args):
             grad_vars = tensorf.get_optparam_groups(args.lr_init*lr_scale, args.lr_basis*lr_scale)
             optimizer = torch.optim.Adam(grad_vars, betas=(0.9, 0.99))
         
+        if iteration in args.save_ckpt_every:
+            tensorf.save(f'{logfolder}/{iteration//1000}k_{args.expname}.th')        
 
-    tensorf.save(f'{logfolder}/{args.expname}.th')
+    tensorf.save(f'{logfolder}/final_{args.expname}.th')
 
 
     if args.render_train:
@@ -430,7 +431,7 @@ def reconstruction(args):
 
     create_gif(f"{logfolder}/gif/plot/vis_every", f"{logfolder}/gif/training.gif")
 
-    return f'{logfolder}/{args.expname}.th'
+    return f'{logfolder}/final_{args.expname}.th'
 
 
 if __name__ == '__main__':

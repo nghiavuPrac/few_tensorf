@@ -258,6 +258,7 @@ class TensorVMSplit(TensorBase):
                                                 align_corners=True).view(-1, *xyz_sampled.shape[:1])
             line_coef = F.grid_sample(self.app_line[idx_plane], coordinate_line[[idx_plane]],
                                             align_corners=True).view(-1, *xyz_sampled.shape[:1])                                                
+
             if step==-1:
                 plane_coef_point.append(plane_coef)
                 line_coef_point.append(line_coef)
