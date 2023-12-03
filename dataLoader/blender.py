@@ -94,7 +94,6 @@ class BlenderDataset(Dataset):
             image_path = os.path.join(self.root_dir, self.split, file_path+'.png')
             self.image_paths += [image_path]
             
-            
             img = Image.open(image_path)
 
             if self.downsample!=1.0:

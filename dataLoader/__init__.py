@@ -7,7 +7,7 @@ from .your_own_data import YourOwnDataset
 
 
 dataset_dict = {'blender': BlenderDataset,
-               'llff':LLFFDataset,
-               'tankstemple':TanksTempleDataset,
-               'nsvf':NSVF,
-                'own_data':YourOwnDataset}
+                'llff':LLFFDataset,
+                'tankstemple':TanksTempleDataset,
+                'nsvf':NSVF,
+                'human':HumanDataset}
