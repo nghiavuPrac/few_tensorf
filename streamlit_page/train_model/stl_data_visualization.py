@@ -1,10 +1,7 @@
 import streamlit as st
 import os
 import glob
-
-def get_folder_names(directory):
-    folder_names = [name for name in os.listdir(directory) if os.path.isdir(os.path.join(directory, name))]
-    return folder_names
+from  utils import * 
 
 def data_visualization(data_dir):         
 

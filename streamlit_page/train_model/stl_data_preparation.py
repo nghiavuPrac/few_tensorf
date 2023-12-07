@@ -1,15 +1,78 @@
 import streamlit as st
 import os
 import glob
+import time
+from  utils import * 
+from few_nerf.dataLoader.__init__ import *
 
-def data_preparation(config_dir):
+
+def data_preparation(data_dir, config_dir):
+    
+    st.subheader('Folder setting')
+
+    choice_dataset = st.selectbox(
+        "Select folder dataset", 
+        os.listdir(data_dir), 
+        key='choice_dataset', 
+        index=None,
+        placeholder="Dataset"
+    )
+
+    if choice_dataset:
+
+        dataset_folder = os.path.join(data_dir, choice_dataset)
+        obj_list = get_folder_names(dataset_folder)
+
+        training_data_dir = ''
+        if len(obj_list) == 0:
+            pass
+        else:
+            dataset_obj_option = st.selectbox(
+                "Select dataset object", 
+                obj_list, 
+                key='train_dataset_obj_option', 
+                index=None,
+                placeholder="Object"
+            )
+            
+            if dataset_obj_option:
+                training_data_dir = os.path.join(data_dir, dataset_obj_option)
+
+    exp_name_box = st.text_input(
+        'Export name',       
+        key='exp_name_box',
+    )
+
+    over_write_box = st.selectbox(
+        "Overwrite", 
+        [True, False], 
+        key='over_write_box'        
+    )
+
+
+    st.markdown('#')
+    st.divider()
+    st.subheader('Dataloader')
+
+    dataloader_box = st.selectbox(
+        "Select folder dataset", 
+        dataset_dict.keys(), 
+        key='train_dataloader_box', 
+        index=None,
+        placeholder="Data loader"
+    )
+
+
+
+    st.markdown('#')
+    st.divider()
     st.subheader('Data Selection')
     
     train_selection_toggle = st.toggle('Random index train', value=True)
     rd_train_selection_box = 0
     tx_train_selection_box = []
     if train_selection_toggle:
-        train_selection_box = st.number_input(
+        rd_train_selection_box = st.number_input(
             'Train data', 
             min_value=0, 
             step=1, 
@@ -18,7 +81,7 @@ def data_preparation(config_dir):
             label_visibility="collapsed"
         )
     else:
-        train_slection_box = st.text_input(
+        tx_train_selection_box = st.text_input(
             'Train data',       
             key='train_slection_box', 
             placeholder='List of training indexs', 
@@ -38,7 +101,7 @@ def data_preparation(config_dir):
             label_visibility="collapsed"
         )
     else:
-        tx_val_slection_box = st.text_input(
+        tx_val_selection_box = st.text_input(
             'Validation data',       
             key='val_slection_box', 
             placeholder='List of val indexs', 
@@ -53,13 +116,12 @@ def data_preparation(config_dir):
             'Test data', 
             min_value=0, 
             step=1, 
-
             key='test_selection_box', 
             placeholder='Number of random images', 
             label_visibility="collapsed"
         )
     else:
-        tx_test_slection_box = st.text_input(
+        tx_test_selection_box = st.text_input(
             'Test data',       
             key='test_slection_box', 
             placeholder='List of test indexs', 
@@ -75,6 +137,7 @@ def data_preparation(config_dir):
     with iteration_col:
         iteration_box = st.number_input(
             'Number of iterations', 
+            value=15000,
             min_value=0, 
             step=1, 
             key='iteration_box', 
@@ -83,15 +146,17 @@ def data_preparation(config_dir):
         batch_size_box = st.number_input(
             'Batch size', 
             min_value=0, 
+            value=1024,
             step=1, 
             key='batch_size_box', 
         )
     with samples_col:
-        samples_col = st.number_input(
-            'Number of samples', 
-            min_value=0, 
-            step=1, 
-            key='samples_col', 
+        ratio_step_box = st.number_input(
+            'Ratio sample step', 
+            value=0.5,
+            min_value=0.0, 
+            step=1.0, 
+            key='ratio_step_box', 
         )
 
     st.markdown('#')
@@ -103,6 +168,7 @@ def data_preparation(config_dir):
         N_voxel_init_box = st.number_input(
             'Number voxel init', 
             min_value=0, 
+            value=128,
             step=1, 
             key='N_voxel_init_box', 
         )
@@ -110,6 +176,7 @@ def data_preparation(config_dir):
         N_voxel_final_box = st.number_input(
             'Number voxel final', 
             min_value=0, 
+            value=300,
             step=1, 
             key='N_voxel_final_box', 
         )
@@ -147,6 +214,7 @@ def data_preparation(config_dir):
         train_vis_every_box = st.number_input(
             'Number of iterations to train visualization', 
             min_value=0, 
+            value=1000,
             step=1, 
             key='train_vis_every_box', 
         )
@@ -154,6 +222,7 @@ def data_preparation(config_dir):
         test_vis_every_box = st.number_input(
             'Number of iterations to test visualization', 
             min_value=0, 
+            value=1000,
             step=1, 
             key='test_vis_every_box', 
         )
@@ -161,6 +230,7 @@ def data_preparation(config_dir):
         save_ckpt_every_box = st.text_input(
             'Number of iterations to save checkpoint',       
             key='save_ckpt_every_box',
+            value=[15000, 30000],
             placeholder='List'
         )
     
@@ -174,6 +244,7 @@ def data_preparation(config_dir):
         density_box = st.number_input(
             'Number of density components', 
             min_value=0, 
+            value=16,
             step=1, 
             key='density_box', 
         )
@@ -181,6 +252,7 @@ def data_preparation(config_dir):
         appearance_box = st.number_input(
             'Number of appearance components', 
             min_value=0, 
+            value=48,
             step=1, 
             key='appearance_box', 
         )
@@ -195,6 +267,7 @@ def data_preparation(config_dir):
         position_enc_box = st.number_input(
             'Position bandwidth', 
             min_value=0, 
+            value=2,
             step=1, 
             key='position_enc_box', 
         )
@@ -202,6 +275,7 @@ def data_preparation(config_dir):
         view_enc_box = st.number_input(
             'View direction bandwidth',  
             min_value=0, 
+            value=2,
             step=1, 
             key='view_enc_box', 
         )
@@ -209,6 +283,7 @@ def data_preparation(config_dir):
         fea_enc_box = st.number_input(
             'Feature bandwidth',  
             min_value=0, 
+            value=2,
             step=1, 
             key='fea_enc_box', 
         )
@@ -216,6 +291,7 @@ def data_preparation(config_dir):
         fea_dim_box = st.number_input(
             'Feature dimension',   
             min_value=0, 
+            value=27,
             step=1, 
             key='fea_dim_box', 
         )
@@ -236,8 +312,9 @@ def data_preparation(config_dir):
             )
             freq_reg_ratio_box = st.number_input(
                 'Frequence ratio',   
-                min_value=0, 
-                max_value=1,                 
+                min_value=0.0, 
+                value=0.8,
+                max_value=1.0,                 
                 key='freq_reg_ratio_box', 
             )
     with occlusion_tab:
@@ -279,12 +356,14 @@ def data_preparation(config_dir):
         with l1_col1:
             L1_weight_inital_box = st.number_input(
                 'L1 weight inital',
-                min_value=0, 
+                value=8e-5,
+                min_value=0.0, 
                 key='L1_weight_inital_box'
             )
             L1_weight_rest_box = st.number_input(
                 'L1 weight rest',
-                min_value=0, 
+                value=4e-5,
+                min_value=0.0, 
                 key='L1_weight_rest_box'
             )
     with ortho_tab:
@@ -292,8 +371,9 @@ def data_preparation(config_dir):
         with ortho_col1:
             ortho_weight_box = st.number_input(
                 'Ortho weight',
-                min_value=0, 
-                max_value=1, 
+                value=0.01,
+                min_value=0.0, 
+                max_value=1.0, 
                 key='ortho_weight_box'
             )
     with tv_tab:
@@ -301,14 +381,16 @@ def data_preparation(config_dir):
         with tv_col1:
             tv_weight_density_box = st.number_input(
                 'TV weight density',
-                min_value=0, 
-                max_value=1,    
+                value=0.01,
+                min_value=0.0, 
+                max_value=1.0,    
                 key='tv_weight_density_box'
             )
             TV_weight_app_box = st.number_input(
                 'TV weight app',
-                min_value=0, 
-                max_value=1,    
+                value=0.01,
+                min_value=0.0, 
+                max_value=1.0,    
                 key='TV_weight_app_box'
             )
     with alpha_tab:
@@ -316,13 +398,16 @@ def data_preparation(config_dir):
         with alpha_col1:
             rm_weight_mask_thre_box = st.number_input(
                 'Remove weight mask threshold',
-                min_value=0,   
+                value=1e-4,
+                min_value=0.0,  
+                max_value=1.0,     
                 key='rm_weight_mask_thre_box'
             )
             alpha_mask_thre_box = st.number_input(
                 'Alpha mask threshold',
-                min_value=0, 
-                max_value=1,    
+                value=1e-4,
+                min_value=0.0, 
+                max_value=1.0,    
                 key='alpha_mask_thre_box'
             )
 
@@ -333,6 +418,7 @@ def data_preparation(config_dir):
 
     config_name_box = st.text_input(
         'Config name',       
+        value=None, 
         key='config_name_box',
     )
 
@@ -343,10 +429,10 @@ def data_preparation(config_dir):
             file.write(
 f'''
 #------ Folder ------ 
-dataset_name = blender
-datadir = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/drums
-expname = test
-basedir = ./log
+dataset_name = {dataloader_box}
+datadir = {training_data_dir}
+expname = {exp_name_box}
+basedir = few_nerf\log
 
 #------ Number images ------
 train_idxs    = {tx_train_selection_box}
@@ -360,7 +446,7 @@ N_test_imgs   = {rd_test_selection_box}
 #------ Config parameters ------
 n_iters = {iteration_box}
 batch_size = {batch_size_box}
-step_ratio = 0.5
+step_ratio = {ratio_step_box}
 
 
 #------ Resolution ------
@@ -376,7 +462,7 @@ downsample_train        = 2
 model_name    = {decomposition_model_box}
 shadingMode   = {mlp_model_box}
 fea2denseAct  = softplus
-overwrt       = True 
+overwrt       = {over_write_box} 
 
 
 #------ Test ------
@@ -420,5 +506,9 @@ rm_weight_mask_thre = {rm_weight_mask_thre_box}
 alpha_mask_thre     = {alpha_mask_thre_box}
 '''
 )
-    
+        with st.spinner('Wait for it...'):
+            time.sleep(1)
+        success = st.success('Done!')
+        time.sleep(1)
+        success.empty()
 
