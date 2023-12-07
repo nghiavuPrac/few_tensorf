@@ -21,11 +21,22 @@ def training_model(config_dir):
 
         args = config_parser(cmd_arguments)
 
+
+
         train_button = st.button(
             'Start training',
             key = 'train_button'
         )        
 
         if train_button:
+            stop_button = st.button(
+                'Stop training',
+                key = 'stop_button'
+            )        
             with st.spinner('Wait for it...'):
-                reconstruction(args)
+
+                # reconstruction(args)
+                if stop_button:
+                    st.write('STOP TRAINING')
+                    print('----------------------------------------------------------------')
+                    exit()

@@ -11,9 +11,12 @@ def train_model():
     
     prepare_data, training, vis_image, vis_obj_3d = st.tabs(["Create config", "Training", "Visualize image", 'Visualize 3d object'])
     
-    data_folder = r'data\data'
-    config_folder = r'few_nerf\configs'
-    obj_folder = r'data\object_data'
+    data_folder = os.path.join('data','data')
+    os.makedirs(data_folder, exist_ok=True)    
+    config_folder = os.path.join('few_nerf','configs')
+    os.makedirs(config_folder, exist_ok=True)
+    obj_folder = os.path.join('data','object_data')
+    os.makedirs(obj_folder, exist_ok=True)
 
     with prepare_data:
         data_preparation(data_folder, config_folder)
