@@ -2,27 +2,19 @@ import configargparse
 
 def config_parser(cmd=None):
     parser = configargparse.ArgumentParser()
-    parser.add_argument('--config', is_config_file=True,
-                        help='config file path')
-    parser.add_argument("--expname", type=str,
-                        help='experiment name')
-    parser.add_argument("--basedir", type=str, default='./log',
-                        help='where to store ckpts and logs')
-    parser.add_argument("--add_timestamp", type=int, default=0,
-                        help='add timestamp to dir')
-    parser.add_argument("--datadir", type=str, default='./data/llff/fern',
-                        help='input data directory')
-    parser.add_argument("--progress_refresh_rate", type=int, default=10,
-                        help='how many iterations to show psnrs or iters')
+    parser.add_argument('--config', is_config_file=True, help='config file path')
+    parser.add_argument("--expname", type=str, help='experiment name')
+    parser.add_argument("--basedir", type=str, default='./log', help='where to store ckpts and logs')
+    parser.add_argument("--add_timestamp", type=int, default=0, help='add timestamp to dir')
+    parser.add_argument("--datadir", type=str, default='./data/llff/fern', help='input data directory')
+    parser.add_argument("--progress_refresh_rate", type=int, default=10, help='how many iterations to show psnrs or iters')
 
     # Number images 
-    parser.add_argument("--N_train_imgs", type=int, default=0,
-                        help='Number of train images')
-    parser.add_argument("--N_test_imgs", type=int, default=0,
-                        help='Number of test images')                                                                                                
-    parser.add_argument("--train_idxs", default=[], type=int, action="append")                        
-    parser.add_argument("--test_idxs", default=[], type=int, action="append")                        
-    parser.add_argument("--val_idxs", default=[], type=int, action="append")                        
+    parser.add_argument("--N_train_imgs", type=int, default=0, help='Number of train images')
+    parser.add_argument("--N_test_imgs", type=int, default=0, help='Number of test images') 
+    parser.add_argument("--train_idxs", default=[], type=int, action="append") 
+    parser.add_argument("--test_idxs", default=[], type=int, action="append") 
+    parser.add_argument("--val_idxs", default=[], type=int, action="append")
 
     parser.add_argument('--with_depth', action='store_true')
     parser.add_argument('--downsample_train', type=float, default=1.0)
@@ -96,16 +88,6 @@ def config_parser(cmd=None):
                         help='scaling sampling distance for computation')
     parser.add_argument("--density_shift", type=float, default=-10,
                         help='shift density in softplus; making density = 0  when feature == 0')
-                        
-    # mip_nerf
-    parser.add_argument("--mip_nerf", action='store_true',
-                        help='using mip_nerf')
-    parser.add_argument("--randomized", action='store_true',
-                        help='using random')          
-    parser.add_argument("--ray_shape", type=str, default='cone', choices=['cone', 'cylinder'],
-                        help='choice ray shape')                                                                              
-    parser.add_argument("--num_levels", type=int, default=1,
-                        help='number of forward per iteration')    
 
     # network decoder
     parser.add_argument("--shadingMode", type=str, default="MLP_PE",
@@ -146,19 +128,23 @@ def config_parser(cmd=None):
                         help='set to render synthetic data on a white bkgd (always use for dvoxels)')
 
 
-
-    parser.add_argument('--N_voxel_init',
-                        type=int,
-                        default=100**3)
-    parser.add_argument('--N_voxel_final',
-                        type=int,
-                        default=300**3)
+    parser.add_argument('--N_voxel_init', type=int, default=100**3)
+    parser.add_argument('--N_voxel_final', type=int, default=300**3)
     parser.add_argument("--upsamp_list", type=int, action="append")
     parser.add_argument("--update_AlphaMask_list", type=int, action="append")
+    parser.add_argument('--idx_view',type=int, default=0)
+    parser.add_argument("--occ_grid_reso", type=int, default=-1)
 
-    parser.add_argument('--idx_view',
-                        type=int,
-                        default=0)
+    parser.add_argument(
+        "--gridSize_factor_per_prop", type=float, nargs="+", default=None
+    )
+    parser.add_argument(
+        "--density_factor_per_prop", type=float, nargs="+", default=None
+    )
+    parser.add_argument(
+        "--num_samples_per_prop", type=int, nargs="+", default=None
+    )
+
     # logging/saving options
     parser.add_argument("--N_vis", type=int, default=5,
                         help='N images to vis')

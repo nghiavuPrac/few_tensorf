@@ -1,25 +1,86 @@
 import torch,os,imageio,sys
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
-from dataLoader.ray_utils import get_rays
+from dataLoader.ray_utils import get_rays, ndc_rays_blender
+
+from models.prop_utils import collate, default_collate_fn_map
 from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
+
 from utils import *
-from dataLoader.ray_utils import ndc_rays_blender
 
-def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096, N_samples=-1, ndc_ray=False, mip=False, white_bg=True, is_train=False, device='cuda'):
+def OctreeRender_trilinear_fast(
+  rays, 
+  tensorf, 
+  mask=None,
+  chunk=4096, 
+  N_samples=-1, 
+  ndc_ray=False, 
+  white_bg=True, 
+  is_train=False,
+  prop_requires_grad=False, 
+  device='cuda'
+):
 
-    corse_rgbs, rgbs, all_rgbs, depth_maps, weights, uncertainties = [], [], [], [], [], []
+    (
+        rgbs,
+        all_rgbs,
+        alphas,
+        depth_maps,
+        weights,
+        uncertainties,
+        num_samples,
+        prop_extras,
+    ) = ([], [], [], [], [], [], [], [])
+
     rgbs_ = []
     N_rays_all = rays.shape[0]
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
-        rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-        rgb_map, all_rgb, depth_map, weight = tensorf(rays_chunk, step, total_step, white_bg=white_bg, is_train=is_train, ndc_ray=ndc_ray, mip=mip, N_samples=N_samples)
-        rgbs.append(rgb_map)            
-        all_rgbs.append(all_rgb)
-        depth_maps.append(depth_map)
-        weights.append(weight)
 
-    return torch.cat(rgbs), torch.cat(all_rgbs), torch.cat(depth_maps), torch.cat(weights), None  
+        rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
+        rgb_map, depth_map, num_valid_samples = tensorf(
+            rays_chunk,
+            mask,
+            is_train=is_train,
+            white_bg=white_bg,
+            ndc_ray=ndc_ray,
+            N_samples=N_samples,
+            prop_requires_grad=prop_requires_grad,
+        )
+
+        rgbs.append(rgb_map)            
+        # all_rgbs.append(all_rgb)
+        depth_maps.append(depth_map)
+        # weights.append(weight)
+
+    """if not tensorf.use_prop:
+        weights_per_level = s_vals_per_level = ray_masks_per_level = None
+    else:
+        collated = collate(
+            prop_extras,
+            collate_fn_map={
+                **default_collate_fn_map,
+                torch.Tensor: lambda x, **_: torch.cat(x, 0),
+            },
+        )
+        weights_per_level, s_vals_per_level, ray_masks_per_level = collated"""
+    
+    """
+    weights_per_level,
+    s_vals_per_level,
+    ray_masks_per_level,
+    """
+
+    return (
+        torch.cat(rgbs),
+        None,
+        torch.cat(depth_maps),
+        None,
+        None,
+        sum(num_samples),
+        None, 
+        None,
+        None
+    )
 
 def create_gif(path_to_dir, name_gif):
     if os.path.exists(path_to_dir):
@@ -34,7 +95,7 @@ def create_gif(path_to_dir, name_gif):
         return
 
 @torch.no_grad()
-def PSNRs_calculate(dataset,tensorf, args, renderer, mip=False, chunk=4096, N_samples=-1,
+def PSNRs_calculate(args, tensorf, dataset, mask, renderer, mip=False, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=False, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
     ssims,l_alex,l_vgg=[],[],[]
@@ -52,8 +113,15 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, mip=False, chunk=4096, N_sa
         W, H = dataset.img_wh
         rays = samples.to(device).view(-1,samples.shape[-1])
 
-        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, mip=mip, white_bg = white_bg, device=device)        
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
         
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
@@ -79,7 +147,7 @@ def PSNRs_calculate(dataset,tensorf, args, renderer, mip=False, chunk=4096, N_sa
 def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer, step, logs, savePath=None, chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, mip=False, compute_extra_metrics=True, device='cuda'):
     PSNRs, rgb_maps, depth_maps = [], [], []
-    ssims,l_alex,l_vgg=[],[],[]
+    ssims, l_alex, l_vgg        = [], [], []
     os.makedirs(savePath, exist_ok=True)
     os.makedirs(savePath+"/rgb", exist_ok=True)
     os.makedirs(savePath+"/rgbd", exist_ok=True)
@@ -90,26 +158,33 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
     except Exception:
         pass
 
-    near_far = train_dataset.near_far
-    idxs = list(range(0, train_dataset.all_rays.shape[0], 1))
-    train_rgb_map = None
-    train_depth_map = None
+    near_far          = train_dataset.near_far
+    idxs              = list(range(0, train_dataset.all_rays.shape[0], 1))
+    train_rgb_map     = None
+    train_depth_map   = None
     img_eval_interval = 1
     for idx, samples in enumerate(train_dataset.all_rays[0::img_eval_interval]):
 
         W, H = train_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, _, disp_map, _, _ = renderer(rays, tensorf, step=-1, mip=mip, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
 
-        rgb_map = rgb_map.clamp(0.0, 1.0)
+        rgb_map             = rgb_map.clamp(0.0, 1.0)
 
-        rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
+        rgb_map, depth_map   = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
 
-        train_depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
+        train_depth_map, _  = visualize_depth_numpy(depth_map.numpy(),near_far)
 
-        train_rgb_map = (rgb_map.numpy() * 255).astype('uint8')
+        train_rgb_map       = (rgb_map.numpy() * 255).astype('uint8')
 
 
 
@@ -124,14 +199,21 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, all_rgbs, disp_map, weights, uncertainty = renderer(rays, tensorf, step=-1, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
 
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
-        rgb_map, disp_map = rgb_map.reshape(H, W, 3).cpu(), disp_map.reshape(H, W).cpu()
+        rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
 
-        test_depth_map, _ = visualize_depth_numpy(disp_map.numpy(),near_far)
+        test_depth_map, _ = visualize_depth_numpy(depth_map.numpy(),near_far)
 
         test_rgb_map = (rgb_map.numpy() * 255).astype('uint8')
         # rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
@@ -191,8 +273,16 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
         W, H = test_dataset.img_wh
         rays = samples.view(-1,samples.shape[-1])
 
-        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
+
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
         rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()
@@ -260,8 +350,16 @@ def evaluation_path(test_dataset,tensorf, c2ws, renderer, savePath=None, N_vis=5
             rays_o, rays_d = ndc_rays_blender(H, W, test_dataset.focal[0], 1.0, rays_o, rays_d)
         rays = torch.cat([rays_o, rays_d], 1)  # (h*w, 6)
 
-        rgb_map, _, depth_map, _, _ = renderer(rays, tensorf, chunk=chunk, N_samples=N_samples,
-                                        ndc_ray=ndc_ray, white_bg = white_bg, device=device)
+        rgb_map, _, depth_map, _, _, _, _, _, _ = renderer(
+            rays,
+            tensorf,
+            chunk=chunk,
+            N_samples=N_samples,
+            ndc_ray=ndc_ray,
+            white_bg=white_bg,
+            device=device,
+        )
+
         rgb_map = rgb_map.clamp(0.0, 1.0)
 
         rgb_map, depth_map = rgb_map.reshape(H, W, 3).cpu(), depth_map.reshape(H, W).cpu()

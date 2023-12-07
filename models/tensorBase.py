@@ -2,6 +2,11 @@ import torch
 import torch.nn
 import torch.nn.functional as F
 from .sh import eval_sh_bases
+from .prop_utils import rendering
+
+import time
+
+import nerfacc
 import numpy as np
 import time
 import torch.nn as nn
@@ -51,9 +56,12 @@ def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=
 
 def positional_encoding(positions, freqs):
     
-        freq_bands = (2**torch.arange(freqs).float()).to(positions.device)  # (F,)
+        freq_bands = (2**torch.arange(freqs).float()).to(
+            positions.device
+        )  # (F,)
         pts = (positions[..., None] * freq_bands).reshape(
-            positions.shape[:-1] + (freqs * positions.shape[-1], ))  # (..., DF)
+            positions.shape[:-1] + (freqs * positions.shape[-1], )
+        )  # (..., DF)
         pts = torch.cat([torch.sin(pts), torch.cos(pts)], dim=-1)
         return pts
 
@@ -61,7 +69,16 @@ def raw2alpha(sigma, dist):
     # sigma, dist  [N_rays, N_samples]
     alpha = 1. - torch.exp(-sigma*dist)
 
-    T = torch.cumprod(torch.cat([torch.ones(alpha.shape[0], 1).to(alpha.device), 1. - alpha + 1e-10], -1), -1)
+    T = torch.cumprod(
+        torch.cat(
+            [
+                torch.ones(alpha.shape[0], 1).to(alpha.device), 
+                1. - alpha + 1e-10
+            ], 
+            -1
+        ), 
+        -1
+    )
 
     weights = alpha * T[:, :-1]  # [N_rays, N_samples]
     return alpha, weights, T[:,-1:]
@@ -88,11 +105,21 @@ class AlphaGridMask(torch.nn.Module):
         self.aabbSize = self.aabb[1] - self.aabb[0]
         self.invgridSize = 1.0/self.aabbSize * 2
         self.alpha_volume = alpha_volume.view(1,1,*alpha_volume.shape[-3:])
-        self.gridSize = torch.LongTensor([alpha_volume.shape[-1],alpha_volume.shape[-2],alpha_volume.shape[-3]]).to(self.device)
+        self.gridSize = torch.LongTensor(
+          [
+            alpha_volume.shape[-1],
+            alpha_volume.shape[-2],
+            alpha_volume.shape[-3]
+          ]
+        ).to(self.device)
 
     def sample_alpha(self, xyz_sampled):
         xyz_sampled = self.normalize_coord(xyz_sampled)
-        alpha_vals = F.grid_sample(self.alpha_volume, xyz_sampled.view(1,-1,1,1,3), align_corners=True).view(-1)
+        alpha_vals = F.grid_sample(
+          self.alpha_volume, 
+          xyz_sampled.view(1,-1,1,1,3), 
+          align_corners=True
+        ).view(-1)
 
         return alpha_vals
 
@@ -154,6 +181,7 @@ class MLPRender_PE(torch.nn.Module):
         self.pospe = pospe
 
         self.encoder  = encoder
+
         self.pos_encoder = self.encoder(0, pospe)
         self.view_encoder = self.encoder(0, viewpe)
 
@@ -167,29 +195,35 @@ class MLPRender_PE(torch.nn.Module):
     def forward(self, pts, viewdirs, features, step, total_step):
         indata = [features, viewdirs]
         if self.pospe > 0:
-          
-            """if len(pts) == 2:
-                mean = pts[0]
-                var = pts[1]
-                encode, _ = self.pos_encoder(mean, var)
-            else:
-                pts = pts[0]
-                encode = self.pos_encoder(pts)"""
             encode = self.pos_encoder(pts)
-
             if step == -1:    
                 indata += [encode]
             else:
-                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
+                mask = get_freq_reg_mask(
+                  encode.shape[1], 
+                  step, 
+                  total_step, 
+                  None, 
+                  device=encode.device
+                ).tile(
+                  (encode.shape[0], 1)
+                )
                 indata += [encode*mask]
 
         if self.viewpe > 0:
-
             encode = positional_encoding(viewdirs, self.viewpe)
             if step == -1:    
                 indata += [encode]
             else:
-                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
+                mask = get_freq_reg_mask(
+                  encode.shape[1], 
+                  step, 
+                  total_step, 
+                  None, 
+                  device=encode.device
+                ).tile(
+                  (encode.shape[0], 1)
+                )
                 indata += [encode*mask]
 
         mlp_in = torch.cat(indata, dim=-1)
@@ -218,36 +252,40 @@ class MLPRender(torch.nn.Module):
         layer2 = torch.nn.Linear(featureC, featureC)
         layer3 = torch.nn.Linear(featureC,3)
 
-        self.mlp = torch.nn.Sequential(layer1, torch.nn.ReLU(inplace=True), layer2, torch.nn.ReLU(inplace=True), layer3)
+        self.mlp = torch.nn.Sequential(
+          layer1, 
+          torch.nn.ReLU(inplace=True), 
+          layer2, 
+          torch.nn.ReLU(inplace=True), 
+          layer3
+        )
+
         torch.nn.init.constant_(self.mlp[-1].bias, 0)
 
-    def forward(self, pts, viewdirs, features, step, total_step):
+    def forward(self, pts, viewdirs, features, mask):
         indata = [features, viewdirs]
 
         if self.pospe > 0:
             encode = self.pos_encoder(pts)
 
-            if step == -1:    
+            if mask == None:    
                 indata += [encode]
             else:
-                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
-                indata += [encode*mask]
+                indata += [encode*mask['pos']]
 
         if self.viewpe > 0:
             encode = positional_encoding(viewdirs, self.viewpe)
-            if step == -1:    
+            if mask == None:
                 indata += [encode]
             else:
-                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
-                indata += [encode*mask]
+                indata += [encode*mask['view']]
 
         if self.feape > 0:
             encode = positional_encoding(features, self.feape)
-            if step == -1:    
+            if mask == None:
                 indata += [encode]
             else:
-                mask = get_freq_reg_mask(encode.shape[1], step, total_step, None, device=encode.device).tile((encode.shape[0], 1))
-                indata += [encode*mask]
+                indata += [encode*mask['fea']]
 
         mlp_in = torch.cat(indata, dim=-1)
         rgb = self.mlp(mlp_in)
@@ -368,11 +406,37 @@ class MLPRender(torch.nn.Module):
             assert False"""
 
 class TensorBase(torch.nn.Module):
-    def __init__(self, args, aabb, gridSize, device, density_n_comp = 8, appearance_n_comp = 24, app_dim = 27,
-                    shadingMode = 'MLP_PE', alphaMask = None, near_far=[2.0,6.0],
-                    density_shift = -10, alphaMask_thres=0.001, distance_scale=25, rayMarch_weight_thres=0.0001,
-                    pos_pe = 6, view_pe = 6, fea_pe = 6, featureC=128, step_ratio=2.0,
-                    fea2denseAct = 'softplus'):
+    def __init__(
+      self, 
+      args, 
+      aabb, 
+      gridSize, 
+      device, 
+      density_n_comp = 8, 
+      appearance_n_comp = 24, 
+      app_dim = 27,
+      shadingMode = 'MLP_PE', 
+      alphaMask = None, 
+      occGrid=None,
+      near_far=[2.0,6.0],
+      density_shift = -10, 
+      alphaMask_thres=0.001, 
+      occGrid_alpha_thres=0.0,
+      distance_scale=25, 
+      rayMarch_weight_thres=0.0001,
+      pos_pe = 6, 
+      view_pe = 6, 
+      fea_pe = 6, 
+      featureC=128, 
+      step_ratio=2.0,
+      fea2denseAct = 'softplus',
+      gridSize_factor_per_prop=None,
+      density_factor_per_prop=None,
+      num_samples_per_prop=None,
+      num_samples=None,
+      opaque_bkgd=False,
+      sampling_type="uniform"
+    ):
         super(TensorBase, self).__init__()
 
         self.args = args
@@ -382,10 +446,12 @@ class TensorBase(torch.nn.Module):
         self.app_dim = app_dim
         self.aabb = aabb
         self.alphaMask = alphaMask
+        self.occGrid = occGrid        
         self.device=device
 
         self.density_shift = density_shift
         self.alphaMask_thres = alphaMask_thres
+        self.occGrid_alpha_thres = occGrid_alpha_thres
         self.distance_scale = distance_scale
         self.rayMarch_weight_thres = rayMarch_weight_thres
         self.fea2denseAct = fea2denseAct
@@ -400,11 +466,34 @@ class TensorBase(torch.nn.Module):
         self.vecMode =  [2, 1, 0]
         self.comp_w = [1,1,1]
 
-
         self.init_svd_volume(gridSize[0], device)
 
-        self.shadingMode, self.pos_pe, self.view_pe, self.fea_pe, self.featureC = shadingMode, pos_pe, view_pe, fea_pe, featureC
-        self.init_render_func(shadingMode, pos_pe, view_pe, fea_pe, featureC, device, self.encoder)
+        self.use_prop = gridSize_factor_per_prop is not None
+        self.gridSize_factor_per_prop = gridSize_factor_per_prop
+        self.density_factor_per_prop = density_factor_per_prop
+        self.num_samples_per_prop = num_samples_per_prop
+        self.num_samples = num_samples
+        self.opaque_bkgd = opaque_bkgd
+        self.sampling_type = sampling_type
+
+        (
+          self.shadingMode, 
+          self.pos_pe, 
+          self.view_pe, 
+          self.fea_pe, 
+          self.featureC
+        ) = shadingMode, pos_pe, view_pe, fea_pe, featureC
+
+        self.pos_bit_length = 2*pos_pe*3
+        self.view_bit_length = 2*view_pe*3
+        self.fea_bit_length = 2*fea_pe*app_dim
+
+        self.density_bit_length = density_n_comp if "CP" in args.model_name else density_n_comp[0]
+        self.app_bit_length = appearance_n_comp if "CP" in args.model_name else appearance_n_comp[0]
+
+        self.init_render_func(
+          shadingMode, pos_pe, view_pe, fea_pe, featureC, device, self.encoder
+        )
 
     def init_render_func(self, shadingMode, pos_pe, view_pe, fea_pe, featureC, device, encoder):
         if shadingMode == 'MLP_PE':
@@ -471,6 +560,7 @@ class TensorBase(torch.nn.Module):
 
             'near_far': self.near_far,
             'step_ratio': self.step_ratio,
+            'occGrid': self.occGrid,
 
             'shadingMode': self.shadingMode,
             'pos_pe': self.pos_pe,
@@ -493,8 +583,21 @@ class TensorBase(torch.nn.Module):
     def load(self, ckpt):
         if 'alphaMask.aabb' in ckpt.keys():
             length = np.prod(ckpt['alphaMask.shape'])
-            alpha_volume = torch.from_numpy(np.unpackbits(ckpt['alphaMask.mask'])[:length].reshape(ckpt['alphaMask.shape']))
-            self.alphaMask = AlphaGridMask(self.device, ckpt['alphaMask.aabb'].to(self.device), alpha_volume.float().to(self.device))
+
+            alpha_volume = torch.from_numpy(
+              np.unpackbits(
+                ckpt['alphaMask.mask']
+              )[:length].reshape(
+                ckpt['alphaMask.shape']
+              )
+            )
+
+            self.alphaMask = AlphaGridMask(
+              self.device, 
+              ckpt['alphaMask.aabb'].to(self.device), 
+              alpha_volume.float().to(self.device)
+            )
+
         self.load_state_dict(ckpt['state_dict'])
 
 
@@ -503,17 +606,27 @@ class TensorBase(torch.nn.Module):
         near, far = self.near_far
         interpx = torch.linspace(near, far, N_samples).unsqueeze(0).to(rays_o)
         if is_train:
-            interpx += torch.rand_like(interpx).to(rays_o) * ((far - near) / N_samples)
+            interpx += torch.rand_like(interpx).to(rays_o) * (
+              (far - near) / N_samples
+            )
 
         rays_pts = rays_o[..., None, :] + rays_d[..., None, :] * interpx[..., None]
-        mask_outbbox = ((self.aabb[0] > rays_pts) | (rays_pts > self.aabb[1])).any(dim=-1)
+        mask_outbbox = (
+          (self.aabb[0] > rays_pts) | (rays_pts > self.aabb[1])
+        ).any(dim=-1)
+
         return rays_pts, interpx, ~mask_outbbox
 
     def sample_ray(self, rays_o, rays_d, is_train=True, N_samples=-1):
         N_samples = N_samples if N_samples>0 else self.nSamples
         stepsize = self.stepSize
         near, far = self.near_far
-        vec = torch.where(rays_d==0, torch.full_like(rays_d, 1e-6), rays_d)
+        vec = torch.where(
+          rays_d==0, 
+          torch.full_like(rays_d, 1e-6), 
+          rays_d
+        )
+
         rate_a = (self.aabb[1] - rays_o) / vec
         rate_b = (self.aabb[0] - rays_o) / vec
         t_min = torch.minimum(rate_a, rate_b).amax(-1).clamp(min=near, max=far)
@@ -546,7 +659,16 @@ class TensorBase(torch.nn.Module):
                 
         alpha = torch.zeros_like(dense_xyz[...,0])
         for i in range(gridSize[0]):
-            alpha[i] = self.compute_alpha(dense_xyz[i].view(-1,3), self.stepSize).view((gridSize[1], gridSize[2]))
+
+            alpha[i] = self.compute_alpha(
+              dense_xyz[i].view(-1,3), 
+              self.stepSize).view(
+                (
+                  gridSize[1], 
+                  gridSize[2]
+                )
+              )
+
         return alpha, dense_xyz
 
     @torch.no_grad()
@@ -558,7 +680,15 @@ class TensorBase(torch.nn.Module):
         total_voxels = gridSize[0] * gridSize[1] * gridSize[2]
 
         ks = 3
-        alpha = F.max_pool3d(alpha, kernel_size=ks, padding=ks // 2, stride=1).view(gridSize[::-1])
+        alpha = F.max_pool3d(
+          alpha, 
+          kernel_size=ks, 
+          padding=ks // 2, 
+          stride=1
+        ).view(
+          gridSize[::-1]
+        )
+
         alpha[alpha>=self.alphaMask_thres] = 1
         alpha[alpha<self.alphaMask_thres] = 0
 
@@ -576,7 +706,14 @@ class TensorBase(torch.nn.Module):
         return new_aabb
 
     @torch.no_grad()
-    def filtering_rays(self, all_rays, all_rgbs, N_samples=256, chunk=10240*5, bbox_only=False):
+    def filtering_rays(
+      self, 
+      all_rays, 
+      all_rgbs, 
+      N_samples=256, 
+      chunk=10240*5, 
+      bbox_only=False
+    ):
         print('========> filtering rays ...')
         tt = time.time()
 
@@ -589,7 +726,11 @@ class TensorBase(torch.nn.Module):
 
             rays_o, rays_d = rays_chunk[..., :3], rays_chunk[..., 3:6]
             if bbox_only:
-                vec = torch.where(rays_d == 0, torch.full_like(rays_d, 1e-6), rays_d)
+                vec = torch.where(
+                  rays_d == 0, 
+                  torch.full_like(rays_d, 1e-6), 
+                  rays_d
+                )
                 rate_a = (self.aabb[1] - rays_o) / vec
                 rate_b = (self.aabb[0] - rays_o) / vec
                 t_min = torch.minimum(rate_a, rate_b).amax(-1)#.clamp(min=near, max=far)
@@ -598,7 +739,9 @@ class TensorBase(torch.nn.Module):
 
             else:
                 xyz_sampled, _,_ = self.sample_ray(rays_o, rays_d, N_samples=N_samples, is_train=False)
-                mask_inbbox= (self.alphaMask.sample_alpha(xyz_sampled).view(xyz_sampled.shape[:-1]) > 0).any(-1)
+                mask_inbbox= (
+                  self.alphaMask.sample_alpha(xyz_sampled).view(xyz_sampled.shape[:-1]) > 0
+                ).any(-1)
 
             mask_filtered.append(mask_inbbox.cpu())
 
@@ -637,24 +780,31 @@ class TensorBase(torch.nn.Module):
 
         return alpha
 
-    def forward(self, rays_chunk, step=-1, total_step=0, white_bg=True, is_train=False, ndc_ray=False, mip=False, randomized=True, ray_shape='cone', N_samples=-1):
+    def _forward(
+      self, 
+      rays_chunk, 
+      mask,
+      white_bg=True, 
+      is_train=False, 
+      ndc_ray=False, 
+      randomized=True,
+      N_samples=-1):
 
         # sample points
         origins = rays_chunk[:, :3]
         viewdirs = rays_chunk[:, 3:6]
-
-        ret = []      
+  
         if ndc_ray:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(rays_chunk[:, :3], viewdirs, is_train=is_train,N_samples=N_samples)
+            xyz_sampled, z_vals, ray_valid = self.sample_ray_ndc(origins, viewdirs, is_train=is_train,N_samples=N_samples)
             dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
             rays_norm = torch.norm(viewdirs, dim=-1, keepdim=True)
             dists = dists * rays_norm
             viewdirs = viewdirs / rays_norm
         else:
-            xyz_sampled, z_vals, ray_valid = self.sample_ray(rays_chunk[:, :3], viewdirs, is_train=is_train, N_samples=N_samples)
+            xyz_sampled, z_vals, ray_valid = self.sample_ray(origins, viewdirs, is_train=is_train, N_samples=N_samples)
             dists = torch.cat((z_vals[:, 1:] - z_vals[:, :-1], torch.zeros_like(z_vals[:, :1])), dim=-1)
         
-        exp_viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
+        viewdirs = viewdirs.view(-1, 1, 3).expand(xyz_sampled.shape)
         
         if self.alphaMask is not None:
             alphas = self.alphaMask.sample_alpha(xyz_sampled[ray_valid])
@@ -669,7 +819,7 @@ class TensorBase(torch.nn.Module):
 
         if ray_valid.any():
             xyz_sampled = self.normalize_coord(xyz_sampled)
-            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], -1, total_step)
+            sigma_feature = self.compute_densityfeature(xyz_sampled[ray_valid], mask)
 
             validsigma = self.feature2density(sigma_feature)
             sigma[ray_valid] = validsigma
@@ -680,9 +830,9 @@ class TensorBase(torch.nn.Module):
         app_mask = weight > self.rayMarch_weight_thres
 
         if app_mask.any():
-            app_features = self.compute_appfeature(xyz_sampled[app_mask], step, total_step)
+            app_features = self.compute_appfeature(xyz_sampled[app_mask], mask['app'])
 
-            valid_rgbs = self.renderModule(xyz_sampled[app_mask], exp_viewdirs[app_mask], app_features, -1, total_step)
+            valid_rgbs = self.renderModule(xyz_sampled[app_mask], viewdirs[app_mask], app_features, mask)
             rgb[app_mask] = valid_rgbs
 
         acc_map = torch.sum(weight, -1)
@@ -698,6 +848,261 @@ class TensorBase(torch.nn.Module):
             depth_map = torch.sum(weight * z_vals, -1)
             depth_map = depth_map + (1. - acc_map) * rays_chunk[..., -1]
 
-        ret.append((rgb_map, rgb, depth_map, weight))
+        num_valid_samples = app_mask.sum()
+        return (
+            rgb_map,
+            depth_map,
+            num_valid_samples,
+            None
+        ) 
 
-        return rgb_map, rgb, depth_map, alpha #, rgb, alpha #, sigma, weight, bg_weight
+    def _forward_nerfacc(
+        self,
+        rays_chunk,
+        mask,
+        white_bg=True,
+        is_train=False,
+        ndc_ray=False,
+        N_samples=-1,
+    ):
+        assert not ndc_ray
+        origins = rays_chunk[:, :3]
+        viewdirs = rays_chunk[:, 3:6]
+
+        def sigma_fn(t_starts, t_ends, ray_indices):
+            t_origins = origins[ray_indices]
+            t_dirs = viewdirs[ray_indices]
+            positions = t_origins + t_dirs * (t_starts + t_ends)[..., None] / 2.0
+            
+            if t_origins.shape[0] == 0:
+                return torch.zeros((0,), device=t_origins.device)
+            return (
+                self.feature2density(  # type: ignore
+                    self.compute_densityfeature(
+                        self.normalize_coord(positions), mask
+                    )
+                )
+                * self.distance_scale
+            )
+
+        def rgb_sigma_fn(t_starts, t_ends, ray_indices):
+            t_origins = origins[ray_indices]
+            t_dirs = viewdirs[ray_indices]
+            if t_origins.shape[0] == 0:
+                return torch.zeros(
+                    (0, 3), device=t_origins.device
+                ), torch.zeros((0,), device=t_origins.device)
+            positions = t_origins + t_dirs * (t_starts + t_ends)[..., None] / 2.0
+            positions = self.normalize_coord(positions)
+            sigmas = (
+                self.feature2density(  # type: ignore
+                    self.compute_densityfeature(positions, mask)
+                )
+                * self.distance_scale
+            )
+            rgbs = self.renderModule(
+                positions, t_dirs, self.compute_appfeature(positions, mask), mask
+            )
+            return rgbs, sigmas
+
+        ray_indices, t_starts, t_ends = self.occGrid.sampling(
+            origins,
+            viewdirs,
+            sigma_fn=sigma_fn,
+            near_plane=self.near_far[0],
+            far_plane=self.near_far[1],
+            render_step_size=self.stepSize,
+            stratified=is_train,
+        )
+        rgb_map, _, depth_map, _ = nerfacc.rendering(
+            t_starts,
+            t_ends,
+            ray_indices=ray_indices,
+            n_rays=origins.shape[0],
+            rgb_sigma_fn=rgb_sigma_fn,
+            render_bkgd=1 if white_bg else 0,
+        )
+
+        return rgb_map, depth_map, t_starts.shape[0]
+
+    def _forward_prop(
+        self,
+        rays_chunk,
+        mask,
+        white_bg=True,
+        is_train=False,
+        ndc_ray=False,
+        N_samples=-1,
+        prop_requires_grad=False,
+    ):
+        assert not ndc_ray
+        origins = rays_chunk[:, :3]
+        viewdirs = rays_chunk[:, 3:6]
+
+        def prop_sigma_fn(t_starts, t_ends, ray_masks, prop_i):
+            t_origins = origins[..., None, :]
+            t_dirs = viewdirs[..., None, :]
+            positions = t_origins + t_dirs * (t_starts + t_ends) / 2.0
+            positions_shape = positions.shape[:-1]
+            if ray_masks is None:
+                sigmas = (
+                    self.feature2density(  # type: ignore
+                        self.compute_densityfeature(
+                            self.normalize_coord(positions).reshape(-1, 3),
+                            prop_i=prop_i
+                        )
+                    ).reshape(*positions_shape, 1)
+                    * self.distance_scale
+                )
+            else:
+                positions = positions[ray_masks]
+                if positions.shape[0] == 0:
+                    sigmas = t_starts.new_zeros(positions_shape + (1,))
+                elif ray_masks.all():
+                    sigmas = self.feature2density(  # type: ignore
+                        self.compute_densityfeature(
+                            self.normalize_coord(
+                                positions.reshape(-1, 3),
+                            ),
+                            prop_i=prop_i,
+                        ).reshape(*positions_shape, 1)
+                        * self.distance_scale,
+                    )
+                else:
+                    sigmas = t_starts.new_zeros(positions_shape + (1,))
+                    sigmas = sigmas.masked_scatter_(
+                        ray_masks[:, None, None],
+                        self.feature2density(  # type: ignore
+                            self.compute_densityfeature(
+                                self.normalize_coord(
+                                    positions.reshape(-1, 3),
+                                ),
+                                prop_i=prop_i,
+                            ).reshape(*positions.shape[:-1], 1)
+                            * self.distance_scale,
+                        ),
+                    )
+            return sigmas
+    
+        def rgb_sigma_fn(t_starts, t_ends, ray_masks):
+            t_origins = origins[..., None, :]
+            t_dirs = viewdirs[..., None, :].repeat_interleave(
+                t_starts.shape[-2], dim=-2
+            )
+            positions = t_origins + t_dirs * (t_starts + t_ends) / 2.0
+            positions_shape = positions.shape[:-1]
+            positions = self.normalize_coord(positions)
+            if ray_masks is None:
+                positions = positions.reshape(-1, 3)
+                sigmas = (
+                    self.feature2density(  # type: ignore
+                        self.compute_densityfeature(positions)
+                    ).reshape(*positions_shape, 1)
+                    * self.distance_scale
+                )
+                rgbs = self.renderModule(
+                    positions,
+                    t_dirs.reshape(-1, 3),
+                    self.compute_appfeature(positions),
+                ).reshape(*positions_shape, 3)
+            else:
+                positions = positions[ray_masks]
+                if positions.shape[0] == 0:
+                    sigmas = t_starts.new_zeros(positions_shape + (1,))
+                    rgbs = t_starts.new_zeros(positions_shape + (3,))
+                elif ray_masks.all():
+                    positions = positions.reshape(-1, 3)
+                    sigmas = (
+                        self.feature2density(  # type: ignore
+                            self.compute_densityfeature(positions)
+                        ).reshape(*positions_shape, 1)
+                        * self.distance_scale
+                    )
+                    rgbs = self.renderModule(
+                        positions,
+                        t_dirs[ray_masks].reshape(-1, 3),
+                        self.compute_appfeature(positions),
+                    ).reshape(*positions_shape, 3)
+                else:
+                    positions = positions.reshape(-1, 3)
+                    sigmas = t_starts.new_zeros(positions_shape + (1,))
+                    rgbs = t_starts.new_zeros(positions_shape + (3,))
+                    sigmas = sigmas.masked_scatter_(
+                        ray_masks[:, None, None],
+                        self.feature2density(  # type: ignore
+                            self.compute_densityfeature(positions)
+                        ).reshape(*positions.shape[:-1], 1)
+                        * self.distance_scale,
+                    )
+                    rgbs = rgbs.masked_scatter_(
+                        ray_masks[:, None, None],
+                        self.renderModule(
+                            positions,
+                            t_dirs[ray_masks].reshape(-1, 3),
+                            self.compute_appfeature(positions),
+                        ).reshape(*positions.shape[:-1], 3),
+                    )
+            return rgbs, sigmas
+
+        (
+            rgb_map,
+            _,
+            depth_map,
+            (weights_per_level, s_vals_per_level, ray_masks_per_level),
+        ) = rendering(
+            rgb_sigma_fn=rgb_sigma_fn,
+            num_samples=self.num_samples,
+            prop_sigma_fns=[
+                lambda *args: prop_sigma_fn(*args, i)
+                for i in range(len(self.num_samples_per_prop))
+            ],
+            num_samples_per_prop=self.num_samples_per_prop,
+            rays_o=origins,
+            rays_d=viewdirs,
+            scene_aabb=self.aabb.reshape(-1),
+            near_plane=self.near_far[0],
+            far_plane=self.near_far[1],
+            stratified=is_train,
+            sampling_type=self.sampling_type,
+            opaque_bkgd=self.opaque_bkgd,
+            render_bkgd=1 if white_bg else 0,
+            proposal_requires_grad=prop_requires_grad,
+        )
+
+        return (
+            rgb_map,
+            depth_map,
+            self.num_samples * ray_masks_per_level[-1].sum(),
+            (weights_per_level, s_vals_per_level, ray_masks_per_level),
+        )
+
+    def forward(
+        self,
+        rays_chunk,
+        mask,
+        white_bg=True,
+        is_train=False,
+        ndc_ray=False,
+        N_samples=-1,
+        prop_requires_grad=False,
+    ):
+
+
+        if self.occGrid is not None:
+            return self._forward_nerfacc(
+                rays_chunk, mask, white_bg, is_train, ndc_ray, N_samples
+            )
+        elif self.use_prop:
+            return self._forward_prop(
+                rays_chunk,
+                mask,
+                white_bg,
+                is_train,
+                ndc_ray,
+                N_samples,
+                prop_requires_grad,
+            )
+        else:
+            return self._forward(
+                rays_chunk, mask, white_bg, is_train, ndc_ray, N_samples
+            )

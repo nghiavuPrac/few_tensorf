@@ -7,6 +7,52 @@ import scipy.signal
 
 mse2psnr = lambda x : -10. * torch.log(x) / torch.log(torch.Tensor([10.]))
 
+def get_freq_reg_mask(pos_enc_length, current_iter, total_reg_iter, max_visible=None, type='submission', device='cpu'):
+  if max_visible is None:
+    # default FreeNeRF
+    dv = 5
+    if current_iter < total_reg_iter:
+      freq_mask = torch.zeros(pos_enc_length).to(device)  # all invisible
+      ptr = pos_enc_length / dv * current_iter / total_reg_iter + 1 
+      ptr = ptr if ptr < pos_enc_length / dv else pos_enc_length / dv
+      int_ptr = int(ptr)
+      freq_mask[: int_ptr * dv] = 1.0  # assign the integer part
+      freq_mask[int_ptr * dv : int_ptr * dv + 3] = (ptr - int_ptr)  # assign the fractional part
+      return torch.clamp(freq_mask, 1e-8, 1 - 1e-8)
+    else:
+      return torch.ones(pos_enc_length).to(device)
+  else:
+    # For the ablation study that controls the maximum visible range of frequency spectrum
+    freq_mask = torch.zeros(pos_enc_length).to(device)
+    freq_mask[: int(pos_enc_length * max_visible)] = 1.0
+    return freq_mask
+
+def get_free_mask(pos_bl=0, view_bl=0, fea_bl=0, den_bl=0, app_bl=0, step=-1, total_step=1, max_visible=None, device='cpu'):
+  pos_mask = None
+  view_mask = None
+  fea_mask = None
+  den_mask = None
+  app_mask = None
+
+  if pos_bl > 0:
+      pos_mask = get_freq_reg_mask(pos_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+  if view_bl > 0:
+      view_mask = get_freq_reg_mask(view_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+  if fea_bl > 0:
+      fea_mask = get_freq_reg_mask(fea_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+  if den_bl > 0:
+      den_mask = get_freq_reg_mask(den_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+  if app_bl > 0:
+      app_mask = get_freq_reg_mask(app_bl, step, total_step, max_visible=max_visible, type='submission', device=device)
+
+  return {
+    'pos': pos_mask,
+    'view': view_mask,
+    'fea': fea_mask,
+    'den': den_mask,
+    'app': app_mask
+  }
+    
 
 def visualize_depth_numpy(depth, minmax=None, cmap=cv2.COLORMAP_JET):
     """

@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name = blender
 datadir = /content/drive/MyDrive/Dataset/NeRF_Data/nerf_synthetic/drums
-expname = test_drums_test
+expname = test
 basedir = ./log
 
 #------ Number images ------
@@ -14,12 +14,13 @@ N_test_imgs   = 10
 
 
 #------ Config parameters ------
-n_iters = 15000
+n_iters = 10000
 batch_size = 1024
 step_ratio = 0.5
 
 
 #------ Resolution ------
+occ_grid_reso           = 300
 N_voxel_init            = 2097156 # 128**3 2097156
 N_voxel_final           = 27000000 # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]
