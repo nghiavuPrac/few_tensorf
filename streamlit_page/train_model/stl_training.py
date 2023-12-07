@@ -13,6 +13,7 @@ def training_model(config_dir):
         index=None,
     )
 
+    st.write(config_option)
     if config_option:
         cmd_arguments = [
             '--config',
@@ -24,7 +25,9 @@ def training_model(config_dir):
         train_button = st.button(
             'Start training',
             key = 'train_button'
-        )
+        )        
+        st.write(config_option)
+        st.write(train_button)
 
         if train_button:
             reconstruction(args)
