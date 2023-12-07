@@ -15,7 +15,7 @@ with st.sidebar:
     st.markdown('# **3D reconstruction**')
     option = st.selectbox(
         'Select option',
-        ['Train model', 'Test model', 'Model'],
+        ['Train model', 'Test model'],
         key='select_option'
     )
 
@@ -25,11 +25,3 @@ if option == 'Train model':
     train_model()
 elif option == 'Test model':
     test_model()
-else:
-    st.header("Model")
-    train_tab, valuation_tab, inference_tab = st.tabs(["Train", "Valuation", "inference"])
-    with train_tab:
-        pass
-    with valuation_tab:
-        pass
-    

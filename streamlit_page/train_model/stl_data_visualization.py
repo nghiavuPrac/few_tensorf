@@ -46,13 +46,12 @@ def data_visualization(data_dir):
                     images_path = os.path.join(data_dir, dataset_option, dataset_obj_option, dataset_type_option)
                     image_list = [os.path.join(images_path, iamge_name) for iamge_name in  os.listdir(images_path)]
                                         
-                    col1,col2 = st.columns(2)
+                    col1,col2 = st.columns([0.3, 0.7])
 
                     if 'counter' not in st.session_state: 
                         st.session_state.counter = 0
 
                     def showPhoto(next):
-                        col1.write(f"Index as a session_state attribute: {st.session_state.counter}")
                         
                         ## Increments the counter to get next photo
                         if next:
@@ -69,13 +68,13 @@ def data_visualization(data_dir):
                         col2.image(photo,caption=photo)
 
                     # Get list of images in folder
-                    col1.subheader("List of images in folder")
+                    col1.subheader("List of images")
                     col1.write(image_list)
 
 
                     with col1:
                         bt_col1, bt_col2 = st.columns(2)
-                        show_back_btn = bt_col1.button("Show back pic ⏭️",on_click=showPhoto,args=([False]))
-                        show_next_btn = bt_col2.button("Show next pic ⏭️",on_click=showPhoto,args=([True]))
+                        show_back_btn = bt_col1.button("Back image", on_click=showPhoto, args=([False]))
+                        show_next_btn = bt_col2.button("Next image", on_click=showPhoto, args=([True]))
                         
             
