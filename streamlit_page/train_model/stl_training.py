@@ -34,9 +34,4 @@ def training_model(config_dir):
                 key = 'stop_button'
             )        
             with st.spinner('Wait for it...'):
-
-                # reconstruction(args)
-                if stop_button:
-                    st.write('STOP TRAINING')
-                    print('----------------------------------------------------------------')
-                    exit()
+                reconstruction(args)                
