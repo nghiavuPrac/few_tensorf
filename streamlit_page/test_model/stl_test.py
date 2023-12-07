@@ -3,7 +3,6 @@ import numpy as np
 import os
 import glob
 import configargparse
-from few_nerf.train import render_test
 from few_nerf.dataLoader.__init__ import *
 from few_nerf.opt import *
 from streamlit_page.test_model.stl_rendering import *

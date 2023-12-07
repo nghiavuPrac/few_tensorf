@@ -10,11 +10,10 @@ def training_model(config_dir):
         "Select config", 
         os.listdir(config_dir), 
         key='config_option', 
-        index=None,
+        index=None, 
     )
 
-    st.write(config_option)
-    if config_option:
+    if config_option != None:
         cmd_arguments = [
             '--config',
             os.path.join(config_dir, config_option)
@@ -26,8 +25,7 @@ def training_model(config_dir):
             'Start training',
             key = 'train_button'
         )        
-        st.write(config_option)
-        st.write(train_button)
 
         if train_button:
-            reconstruction(args)
+            with st.spinner('Wait for it...'):
+                reconstruction(args)

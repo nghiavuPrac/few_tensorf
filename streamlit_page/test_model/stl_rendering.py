@@ -2,6 +2,8 @@ import streamlit as st
 import os
 import glob
 from few_nerf.opt import *
+from few_nerf.train import render_test
+
 
 def rendering(log_dir):
     object_option = st.selectbox(

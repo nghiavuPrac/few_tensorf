@@ -36,7 +36,7 @@ def data_preparation(data_dir, config_dir):
             )
             
             if dataset_obj_option:
-                training_data_dir = os.path.join(data_dir, dataset_obj_option)
+                training_data_dir = os.path.join(data_dir, choice_dataset, dataset_obj_option)
 
     exp_name_box = st.text_input(
         'Export name',       
@@ -424,8 +424,9 @@ def data_preparation(data_dir, config_dir):
 
     save_cf_button = st.button('Save config', type="primary")
 
-    if config_name_box and config_name_box:
+    if config_name_box and save_cf_button:
         with open(os.path.join(config_dir, config_name_box) , "w") as file:
+            
             file.write(
 f'''
 #------ Folder ------ 
@@ -474,7 +475,7 @@ save_ckpt_every   = {save_ckpt_every_box}
 
 #------ Decomposition ------
 n_lamb_sigma = {[density_box, density_box, density_box] if 'VM' in decomposition_model_box else density_box}
-n_lamb_sh = {[appearance_box, appearance_box, appearance_box] if 'CP' in decomposition_model_box else appearance_box}
+n_lamb_sh = {[appearance_box, appearance_box, appearance_box] if 'VM' in decomposition_model_box else appearance_box}
 
 
 #------ Feature config ------
