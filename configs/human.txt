@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name = human
 datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0525_800_800_100_3S_raw
-expname = free_0525_882
+expname = raw_0525_882_27
 basedir = ./log
 
 #------ Number images ------
@@ -55,11 +55,11 @@ n_lamb_sh = [48,48,48]
 pos_pe  = 8
 view_pe = 8
 fea_pe = 2
-data_dim_color = 18
+data_dim_color = 27
 
 
 #------ Frequence reg ------
-free_reg        = True 
+free_reg        = False 
 freq_reg_ratio  = 0.8
 
 

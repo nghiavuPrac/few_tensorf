@@ -409,7 +409,7 @@ def reconstruction(args):
               device      =device
             )
         else:
-            free_maskes = get_free_mask()
+            free_maskes = None
 
         #rgb_map, alphas_map, depth_map, weights, uncertainty
         (
