@@ -20,7 +20,7 @@ step_ratio = 0.5
 
 
 #------ Resolution ------
-occ_grid_reso           = 300
+occ_grid_reso           = 0
 N_voxel_init            = 2097156 # 128**3 2097156
 N_voxel_final           = 27000000 # 300**3
 upsamp_list             = [2000,3000,4000,5500,7000]

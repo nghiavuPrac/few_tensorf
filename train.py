@@ -87,8 +87,6 @@ def export_mesh(args, ckpt_path):
     tensorf.load(ckpt)
 
     alpha,_ = tensorf.getDenseAlpha()
-    print(alpha.shape)
-    print('[[[[[[[[]]]]]]]]')
     convert_sdf_samples_to_ply(
       alpha.cpu(), 
       f'{ckpt_path[:-3]}.ply',
@@ -662,7 +660,7 @@ def reconstruction(args):
           device      = device
         )
     
-    np.savez(f"{logfolder}/history.npz", *history)
+    np.savez(f"{logfolder}/history.npz", **history)
 
     create_gif(f"{logfolder}/gif/plot/vis_every", f"{logfolder}/gif/training.gif")
 

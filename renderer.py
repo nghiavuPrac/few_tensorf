@@ -37,7 +37,7 @@ def OctreeRender_trilinear_fast(
     for chunk_idx in range(N_rays_all // chunk + int(N_rays_all % chunk > 0)):
 
         rays_chunk = rays[chunk_idx * chunk:(chunk_idx + 1) * chunk].to(device)
-        rgb_map, depth_map, num_valid_samples = tensorf(
+        rgb_map, depth_map, num_valid_samples, prop_extras = tensorf(
             rays_chunk,
             mask,
             is_train=is_train,
@@ -52,7 +52,7 @@ def OctreeRender_trilinear_fast(
         depth_maps.append(depth_map)
         # weights.append(weight)
 
-    """if not tensorf.use_prop:
+    if not tensorf.use_prop:
         weights_per_level = s_vals_per_level = ray_masks_per_level = None
     else:
         collated = collate(
@@ -62,13 +62,7 @@ def OctreeRender_trilinear_fast(
                 torch.Tensor: lambda x, **_: torch.cat(x, 0),
             },
         )
-        weights_per_level, s_vals_per_level, ray_masks_per_level = collated"""
-    
-    """
-    weights_per_level,
-    s_vals_per_level,
-    ray_masks_per_level,
-    """
+        weights_per_level, s_vals_per_level, ray_masks_per_level = collated
 
     return (
         torch.cat(rgbs),
@@ -77,9 +71,9 @@ def OctreeRender_trilinear_fast(
         None,
         None,
         sum(num_samples),
-        None, 
-        None,
-        None
+        weights_per_level,
+        s_vals_per_level,
+        ray_masks_per_level
     )
 
 def create_gif(path_to_dir, name_gif):
@@ -255,10 +249,12 @@ def save_rendered_image_per_train(train_dataset, test_dataset, tensorf, renderer
 @torch.no_grad()
 def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prtx='', chunk=4096, N_samples=-1,
                white_bg=False, ndc_ray=False, compute_extra_metrics=True, device='cuda'):
-    PSNRs, rgb_maps, depth_maps = [], [], []
+    PSNRs, gt_rgb_maps, rgb_maps, depth_maps = [], [], [], []
     ssims,l_alex,l_vgg=[],[],[]
     os.makedirs(savePath, exist_ok=True)
     os.makedirs(savePath+"/rgbd", exist_ok=True)
+    os.makedirs(savePath+"/prediction", exist_ok=True)
+    os.makedirs(savePath+"/ground_truth", exist_ok=True)
 
     try:
         tqdm._instances.clear()
@@ -302,11 +298,14 @@ def evaluation(test_dataset,tensorf, args, renderer, savePath=None, N_vis=5, prt
                 l_vgg.append(l_v)
 
         rgb_map = (rgb_map.numpy() * 255).astype('uint8')
-        # rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
+        gt_rgb_map = (gt_rgb.numpy() * 255).astype('uint8')
+
         rgb_maps.append(rgb_map)
+        gt_rgb_maps.append(gt_rgb_map)
         depth_maps.append(depth_map)
         if savePath is not None:
-            imageio.imwrite(f'{savePath}/{prtx}{idx:03d}.png', rgb_map)
+            imageio.imwrite(f'{savePath}/prediction/{prtx}{idx:03d}.png', rgb_map)
+            imageio.imwrite(f'{savePath}/ground_truth/{prtx}{idx:03d}.png', gt_rgb_map)
             rgb_map = np.concatenate((rgb_map, depth_map), axis=1)
             imageio.imwrite(f'{savePath}/rgbd/{prtx}{idx:03d}.png', rgb_map)
 

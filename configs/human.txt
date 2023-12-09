@@ -1,7 +1,7 @@
 #------ Folder ------ 
 dataset_name = human
-datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0300_800_800_50_3S_raw
-expname = test_0300
+datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0525_800_800_100_3S_raw
+expname = free_0525_882
 basedir = ./log
 
 #------ Number images ------
@@ -47,15 +47,15 @@ save_ckpt_every   = [15000, 30000, 50000]
 
 
 #------ Decomposition ------
-n_lamb_sigma = [96,96,96]
-n_lamb_sh = [96,96,96]
+n_lamb_sigma = [16,16,16]
+n_lamb_sh = [48,48,48]
 
 
 #------ Feature config ------
 pos_pe  = 8
 view_pe = 8
 fea_pe = 2
-data_dim_color = 27
+data_dim_color = 18
 
 
 #------ Frequence reg ------
