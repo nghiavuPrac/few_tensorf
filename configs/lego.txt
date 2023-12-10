@@ -1,8 +1,8 @@
 #------ Folder ------ 
 dataset_name = blender
-datadir = /content/drive/MyDrive/Dataset/THuman2.0/rendered_images/0300_800_800_50_3S_raw
+datadir = data/data/nerf_synthetic/lego
 expname = free_0300
-basedir = ./log
+basedir = few_tensorf/log
 
 #------ Number images ------
 # train_idxs    = [26, 86, 2, 55, 75, 16, 73, 93]
