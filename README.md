@@ -54,7 +54,7 @@ More options refer to the `opt.py`.
 ## Training
 
 ```
-ython {train_path} --config {config} --render_test 1
+python {train_path} --config {config} --render_test 1
 ```
 
 ## Rendering

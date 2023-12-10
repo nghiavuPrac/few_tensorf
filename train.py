@@ -442,8 +442,6 @@ if __name__ == '__main__':
 
     args = config_parser()
 
-    if args.export_mesh:
-        export_mesh(args, args.ckpt)
 
     if args.render_only and (args.render_test or args.render_path or args.render_train):
         render_test(args)
@@ -452,4 +450,7 @@ if __name__ == '__main__':
         export_mesh(args, ckpt_path)  
 
         import shutil 
-        shutil.copy(args.config, ckpt_path[:-3]+'.txt')         
+        shutil.copy(args.config, ckpt_path[:-3]+'.txt')    
+
+    if args.export_mesh:
+        export_mesh(args, args.ckpt)     

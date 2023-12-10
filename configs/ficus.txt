@@ -61,17 +61,17 @@ freq_reg_ratio  = 0.8
 
 
 #------ Occlusion reg ------
-occ_reg_loss_mult   = 1
+occ_reg_loss_mult   = 0.1
 occ_reg_range       = 0
 occ_wb_range        = 0
 occ_wb_prior        = False
 
 
 #------ Reg ------
-L1_weight_inital    = 0.01008
-L1_weight_rest      = 0.01004
-Ortho_weight        = 0.01
-TV_weight_density   = 0.01
-TV_weight_app       = 0.01
+L1_weight_inital    = 0.00008
+L1_weight_rest      = 0.00004
+#Ortho_weight        = 0.01
+#TV_weight_density   = 0.01
+#TV_weight_app       = 0.01
 rm_weight_mask_thre = 0.0001
-alpha_mask_thre     = 0.0001
+#alpha_mask_thre     = 0.0001
