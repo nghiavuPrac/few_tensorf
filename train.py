@@ -3,19 +3,19 @@ from tqdm.auto import tqdm
 
 import torch.nn.functional as F
 import json, random
-from renderer import *
-from utils import *
+from .renderer import *
+from .utils import *
 from torch.utils.tensorboard import SummaryWriter
 import datetime
-from dataLoader import dataset_dict
+from .dataLoader import dataset_dict
 import sys
 import json 
-from opt import config_parser
+from .opt import config_parser
 from pathlib import Path
 import torch
 import matplotlib.pyplot as plt
 import numpy as np
-from dataLoader import ray_utils
+from .dataLoader import ray_utils
 import timeit
 
 

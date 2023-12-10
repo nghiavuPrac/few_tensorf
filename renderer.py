@@ -1,10 +1,10 @@
 import torch,os,imageio,sys
 import matplotlib.pyplot as plt
 from tqdm.auto import tqdm
-from dataLoader.ray_utils import get_rays
-from models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
-from utils import *
-from dataLoader.ray_utils import ndc_rays_blender
+from .dataLoader.ray_utils import get_rays
+from .models.tensoRF import TensorVM, TensorCP, raw2alpha, TensorVMSplit, AlphaGridMask
+from .utils import *
+from .dataLoader.ray_utils import ndc_rays_blender
 
 def OctreeRender_trilinear_fast(rays, tensorf, step=-1, total_step=0, chunk=4096, N_samples=-1, ndc_ray=False, mip=False, white_bg=True, is_train=False, device='cuda'):
 
