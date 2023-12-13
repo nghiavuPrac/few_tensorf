@@ -1,0 +1,77 @@
+
+#------ Folder ------ 
+dataset_name = human
+datadir = data/data/Thuman2.0/0240
+expname = free_8_0240
+basedir = few_tensorf/log
+
+#------ Number images ------
+train_idxs    = []
+val_idxs      = []
+test_idxs     = []
+
+N_train_imgs  = 8
+N_test_imgs   = 25
+
+
+#------ Config parameters ------
+n_iters = 15000
+batch_size = 1024
+step_ratio = 1.5
+
+
+#------ Resolution ------
+#occ_grid_reso           = 300
+N_voxel_init            = 2097152 # 128**3 2097156
+N_voxel_final           = 27000000 # 300**3
+upsamp_list             = [2000,3000,4000,5500,7000]
+update_AlphaMask_list   = [2000,4000]
+downsample_train        = 2
+
+
+#------ Model name ------
+model_name    = TensorVMSplit
+shadingMode   = MLP
+fea2denseAct  = softplus
+overwrt       = True 
+
+
+#------ Test ------
+N_vis             = 5
+vis_every         = 1000
+train_vis_every   = 1000
+save_ckpt_every   = [15000, 30000]
+
+
+#------ Decomposition ------
+n_lamb_sigma = [16, 16, 16]
+n_lamb_sh = [48, 48, 48]
+
+
+#------ Feature config ------
+pos_pe  = 2
+view_pe = 2
+fea_pe = 2
+data_dim_color = 27
+
+
+#------ Frequence reg ------
+free_reg        = True
+freq_reg_ratio  = 0.8
+
+
+#------ Occlusion reg ------
+occ_reg_loss_mult   = 0
+occ_reg_range       = 0
+occ_wb_range        = 0
+occ_wb_prior        = None
+
+
+#------ Reg ------
+L1_weight_inital    = 8e-05
+L1_weight_rest      = 4e-05
+Ortho_weight        = 0.01
+TV_weight_density   = 0.01
+TV_weight_app       = 0.01
+rm_weight_mask_thre = 0.0001
+alpha_mask_thre     = 0.0001
