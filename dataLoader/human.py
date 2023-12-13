@@ -14,7 +14,7 @@ from torchvision import transforms as T
 from .ray_utils import *
 
 
-class YourOwnDataset(Dataset):
+class HumanDataset(Dataset):
     def __init__(self, datadir, split='train', downsample=1.0, is_stack=False, N_vis=-1, tqdm=True, N_imgs=0, indexs=[],
     enhance=None):
 
